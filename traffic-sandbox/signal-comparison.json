@@ -1,0 +1,34 @@
+{
+  "source": "synthetic-simulation",
+  "horizonSeconds": 600,
+  "baseline": "A: fixed 30-second green, 3-second yellow, 2-second all-red, mutually exclusive directions",
+  "scenarios": [
+    {
+      "name": "默认高峰",
+      "seed": 20261012,
+      "settings": {"demand":30,"motorDemand":6,"northDemand":8,"outbound":72,"branchShare":40},
+      "fixed": {"averageQueue":28.914833333376784,"averageWait":54.341142857142195,"passed":175,"departed":254,"remainingQueue":74},
+      "adaptive": {"averageQueue":13.229500000017413,"averageWait":28.272897196261873,"passed":214,"departed":271,"remainingQueue":18},
+      "queueReductionPercent": 54.2466669356644,
+      "waitReductionPercent": 47.97147113635669
+    },
+    {
+      "name": "南向偏重高峰",
+      "seed": 20261013,
+      "settings": {"demand":50,"motorDemand":12,"northDemand":8,"outbound":80,"branchShare":20},
+      "fixed": {"averageQueue":37.757333333247104,"averageWait":61.59465240641627,"passed":187,"departed":226,"remainingQueue":81},
+      "adaptive": {"averageQueue":34.2938333332979,"averageWait":50.570854271356595,"passed":199,"departed":215,"remainingQueue":75},
+      "queueReductionPercent": 9.173052475343734,
+      "waitReductionPercent": 17.89732988883843
+    },
+    {
+      "name": "双向接近平衡",
+      "seed": 20261014,
+      "settings": {"demand":40,"motorDemand":8,"northDemand":8,"outbound":50,"branchShare":20},
+      "fixed": {"averageQueue":38.95233333322958,"averageWait":54.55728155339755,"passed":206,"departed":264,"remainingQueue":89},
+      "adaptive": {"averageQueue":34.027999999968465,"averageWait":44.784474885844695,"passed":219,"departed":261,"remainingQueue":102},
+      "queueReductionPercent": 12.641946994893505,
+      "waitReductionPercent": 17.912928190873643
+    }
+  ]
+}

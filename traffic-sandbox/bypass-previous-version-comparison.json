@@ -1,0 +1,26 @@
+{
+  "source": "synthetic-simulation",
+  "horizonSeconds": 600,
+  "settings": {
+    "demand": 12,
+    "electric": 40,
+    "outbound": 72,
+    "motorDemand": 6,
+    "northDemand": 3
+  },
+  "previousBranchShare": 70,
+  "northBypassShare": 60,
+  "previous": {
+    "averageQueueA": 2.7079999999990565,
+    "averageWaitA": 12.787401574803214,
+    "remainingQueueA": 1,
+    "departed": 182
+  },
+  "updated": {
+    "averageQueueA": 1.329333333333371,
+    "averageWaitA": 7.976000000000022,
+    "remainingQueueA": 0,
+    "departed": 186
+  },
+  "queueReductionPercent": 50.91088133922326
+}

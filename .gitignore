@@ -1,0 +1,50 @@
+# Local credentials and generated certificates
+.env*
+!.env.example
+**/private/
+**/*.pem
+**/*.key
+**/runtime.json
+**/certificate-info.json
+**/平台访问地址.txt
+
+# Local service state and logs
+**/*.log
+**/last-start.json
+**/launch.lock
+
+# Backups, runtime dependencies, and caches
+_backup*/
+**/_backup*/
+**/.venv/
+**/node_modules/
+**/__pycache__/
+
+# Internal project notes and competition documents may contain private details
+AGENT.md
+AGENTS.md
+.agents/
+浙大校园AI创新应用大赛/
+地图素材/
+route-behavior-review/
+map-completion/
+ui-validation/
+*.docx
+下一步计划*.txt
+admin-ai-design/platform-*.json
+campus-access/*validation*.json
+
+# Validation evidence is kept locally; publish only README preview images
+**/evidence/
+!traffic-sandbox/evidence/
+traffic-sandbox/evidence/*
+!traffic-sandbox/evidence/auto-restart/
+traffic-sandbox/evidence/auto-restart/*
+!traffic-sandbox/evidence/auto-restart/production-preview.jpg
+!traffic-sandbox/evidence/route-behavior/
+traffic-sandbox/evidence/route-behavior/*
+!traffic-sandbox/evidence/route-behavior/formal-student.png
+
+# OS/editor noise
+.DS_Store
+Thumbs.db

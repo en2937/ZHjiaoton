@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>校园交通 · Dify 接入验证</title><link rel="stylesheet" href="/style.css"></head>
+<body>
+<main>
+  <header><p class="eyebrow">校园交通 / 独立联调</p><h1>让 AI 读到这一轮状态</h1><p>测试网页 → 本地项目后端 → 学校 Dify</p></header>
+  <section class="connection"><div><strong id="connection">正在检查后端…</strong><p id="apiAddress"></p></div><button id="check">检查 Dify 连接</button></section>
+  <p class="notice">以下为人工构造的接口测试样例，非沙盘计算、非真实路况。验证状态传递时不会修改交通沙盘。</p>
+  <div class="layout">
+    <section class="panel"><h2>本轮推演样例</h2><div class="switch"><button id="fixtureA" aria-pressed="true">样例 A</button><button id="fixtureB" aria-pressed="false">样例 B</button></div><p id="version"></p><div id="metrics"></div><details><summary>查看发送给后端的状态</summary><pre id="state"></pre></details></section>
+    <section class="panel"><h2>问学校 AI</h2><form id="chat"><label for="question">你的问题</label><textarea id="question" maxlength="2000" rows="4">从1到2骑电动车，主路和环岛怎么选？请给出两条路线的耗时和依据。</textarea><div class="actions"><button type="submit" id="send">发送当前问题和状态</button><button type="button" class="secondary" id="newSession">新会话</button></div></form><p id="resultStatus" role="status" aria-live="polite">配置完成后可发送问题。同一会话切换 A/B，检查回答是否更新。</p><div id="answers"></div></section>
+  </div>
+  <footer>学校平台：<a href="https://dify.zju.edu.cn/apps" target="_blank" rel="noreferrer">打开 Dify 工作室</a> · API 密钥通过本地配置程序提供给后端</footer>
+</main><script type="module" src="/app.mjs"></script>
+</body></html>

@@ -1,0 +1,7 @@
+<section id="adminAssistant" class="admin-assistant" aria-labelledby="adminAiTitle" hidden>
+ <header class="ai-heading"><div><h2 id="adminAiTitle">交通助手</h2><p>调整参数 · 分析拥堵 · 比较方案</p></div><button type="button" id="adminAiClose" class="ai-icon-button" aria-label="关闭交通助手">×</button></header>
+ <div class="ai-toolbar"><button type="button" id="adminAiClear">新对话</button><button type="button" id="adminAiUndo" disabled>撤回上次调整</button></div>
+ <div id="adminAiLog" class="ai-log" role="log" aria-label="管理员与交通助手的对话" aria-live="polite" aria-relevant="additions text"><p class="ai-welcome">告诉我需要调整的参数，或让我分析当前交通。</p></div>
+ <div class="ai-quick" aria-label="快捷提问"><button type="button" data-ai-question="分析当前A和B路口的拥堵。">分析拥堵</button><button type="button" data-ai-question="给一个缓解A拥堵的优化方案，先不要执行。">给优化方案</button><button type="button" data-ai-question="当前有哪些参数可以调整？">查看可调参数</button></div>
+ <form id="adminAiForm" class="ai-form"><label for="adminAiQuestion">管理指令</label><textarea id="adminAiQuestion" maxlength="1000" rows="3" placeholder="例如：把北侧绕行调到80%，并切换为自动配时" aria-describedby="adminAiHint adminAiError"></textarea><p id="adminAiError" class="ai-error" role="alert" hidden></p><div class="ai-form-bottom"><span id="adminAiHint">Enter 发送 · Shift+Enter 换行</span><button type="submit" id="adminAiSend">发送</button></div></form>
+</section>

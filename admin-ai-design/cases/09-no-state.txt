@@ -1,0 +1,1 @@
+{"protocol":"campus-admin-v1","state":null,"context":{"pendingProposal":null},"question":"分析当前拥堵。"}

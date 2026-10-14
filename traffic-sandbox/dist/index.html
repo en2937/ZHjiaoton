@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="浙江大学紫金港校区交通模拟沙盘：展示上课高峰期间，1、2 两点间电动车、自行车与机动车的双向通行及路口排队。">
+<title>紫金港 · 校园交通沙盘</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="shell">
+<header class="header">
+  <div class="brand"><span class="brand-mark"><img src="/assets/zju-emblem.png" alt="浙江大学校徽"></span><div><h1>紫金港 · 校园交通沙盘</h1></div></div>
+  <div class="header-right"><a class="text-button" href="http://127.0.0.1:4183/student/" target="_blank" rel="noopener">师生出行 ↗</a></div>
+</header>
+<main>
+<section class="overview" aria-label="场景与模拟指标">
+  <div class="scene-title"><h2>交通概览</h2></div>
+  <div class="metric"><span>当前在途</span><strong id="active">—</strong><small id="vehicleTypes">电动 — · 自行车 — · 机动车 —</small></div>
+  <div class="metric"><span>路口等待</span><strong id="queued">—</strong><small>辆</small></div>
+  <div class="metric"><span>平均离场用时</span><strong id="travel">—</strong><small id="travelHint">暂无完成行程</small></div>
+</section>
+<div class="workspace">
+<section class="map-panel" aria-label="交通地图">
+  <div class="panel-heading"><div><span class="live-dot" id="liveDot"></span><strong id="playState">推演中</strong><span class="divider" id="clockSeparator" hidden>/</span><time id="clock" datetime="07:50:00" aria-label="沙盘模拟时间" hidden>07:50:00</time></div><button class="text-button" id="fit">全图视野 ↗</button></div>
+  <div class="map-stage" id="mapStage">
+    <canvas id="map" aria-label="校园路线：圆点从 1、2 及中路北侧入场，迪臣中路南行西侧、北行东侧；藕舫中路西侧骑行双向、东侧机动车双向，可沿新地图的半圆形环岛逆时针通行，在路口分流后驶出地图边界。" role="img"></canvas>
+    <div class="map-label"><span>紫金港校区</span></div>
+    <div class="map-tools"><button id="zoomIn" aria-label="放大地图">＋</button><button id="zoomOut" aria-label="缩小地图">−</button></div>
+    <div class="map-hint">拖动平移 · 滚轮缩放 · 点击路口查看</div>
+    <div class="legend"><span><i class="electric"></i> 电动车</span><span><i class="bicycle"></i> 自行车</span><span><i class="motor"></i> 机动车</span><span><i class="roundabout"></i> 通行路线</span><span><i class="queue"></i> 等待车辆</span><span><i style="background:#00aac1"></i> 变道中</span><span><i class="extension"></i> 示意道路</span></div>
+    <p class="error" id="mapError" hidden>地图加载失败，请刷新重试。</p>
+  </div>
+  <div class="playback">
+    <button class="primary" id="play" aria-label="暂停模拟">Ⅱ <span>暂停</span></button>
+    <button class="secondary" id="reset">↺ 重置</button>
+    <div class="speed-control" aria-label="播放速度"><span>速度</span><button data-speed="1">1×</button><button class="selected" data-speed="4" aria-pressed="true">4×</button><button data-speed="8">8×</button></div>
+    <p id="syncStatus" class="hint connection-error" role="status" hidden></p>
+  </div>
+</section>
+<aside>
+<section class="card controls">
+  <div class="section-title"><h2>场景设置</h2></div>
+  <form id="departureScenarioForm" aria-label="出发场景设置">
+    <label class="scenario-field" for="departureMode"><span>出发模式</span><select id="departureMode"><option value="fixed">模拟固定需求</option><option value="survey">仿真模式</option></select></label>
+    <div class="survey-inputs" id="departureSurveyInputs" hidden>
+      <label class="scenario-field" for="departurePeriod"><span>仿真时段</span><select id="departurePeriod" required><option value="08:00">07:00–08:00</option><option value="10:00">09:00–10:00</option><option value="14:00">13:00–14:00</option></select></label>
+      <label class="scenario-field" for="observationTime"><span>观察开始时间</span><input id="observationTime" type="time" min="07:00" max="08:00" step="60" value="07:00" required></label>
+    </div>
+    <p class="fine" id="departureApplyStatus" role="status" hidden></p>
+  </form>
+  <p class="fine" id="departureSceneState">当前：模拟固定需求</p>
+  <div class="survey-progress" id="surveyProgress" hidden>
+    <div class="survey-counts"><span>计划出发<b id="surveyPlanned">0 人</b></span><span>已到出发时刻<b id="surveyDeparted">0 人</b></span><span>入口等待<b id="surveyEntryWaiting">0 人</b></span><span>实际入场<b id="surveyEntered">0 人</b></span></div>
+    <div class="survey-chart-title"><span id="departureCurveLabel">计划出发速率</span><small>人/分钟</small></div>
+    <svg class="survey-chart" viewBox="0 0 290 64" role="img" aria-label="仿真模式计划出发速率，单位人每分钟"><path d="M0 57H290" stroke="#dce7f4"/><path id="departureHistogram" fill="none" stroke="#2f77bc" stroke-width="2"/><line id="departureCursor" x1="0" y1="6" x2="0" y2="57" stroke="#174f89" stroke-dasharray="3 3"/></svg>
+    <div class="chart-caption"><span id="departureWindowStart">07:00</span><span id="departurePeak">—</span><span id="departureLesson">08:00 上课</span></div>
+  </div>
+
+  <div class="segmented" id="fixedDemandPresets" aria-label="模拟固定需求预设"><button data-preset="normal" aria-pressed="false">日常车流</button><button class="selected" data-preset="peak" aria-pressed="true">上课高峰</button></div>
+  <label class="field" for="demand"><span><span id="demandLabel">骑行车流</span> <output id="demandValue">30 辆/分钟</output></span><input id="demand" type="range" min="4" max="50" step="1" value="30"></label>
+  <label class="field" for="electricRatio"><span>电动车占比 <output id="electricValue">70%</output></span><input id="electricRatio" type="range" min="0" max="100" step="5" value="70"></label>
+  <label class="field" for="motorDemand"><span>机动车流 <output id="motorValue">6 辆/分钟</output></span><input id="motorDemand" type="range" min="0" max="20" step="1" value="6"></label>
+  <label class="field" for="northDemand"><span>北侧来车 <output id="northValue">8 辆/分钟</output></span><input id="northDemand" type="range" min="0" max="20" step="1" value="8"></label>
+  <label class="field" for="behaviorMode"><span>选路规则</span><select id="behaviorMode"><option value="original">原选路规则</option><option value="grouped">认知与意愿分组</option></select></label>
+  <label class="field" id="guidanceField" for="guidanceCoverage" hidden><span>引导覆盖 <output id="guidanceValue">0%</output></span><input id="guidanceCoverage" type="range" min="0" max="100" step="5" value="0"><small>向可绕行学生提供路线信息；不代表接受率</small></label>
+  <p class="fine" id="behaviorStats" hidden></p>
+  <label class="field" for="northBypassShare"><span><span id="bypassLabel">北侧环岛绕行 A</span> <output id="northBypassValue">60%</output></span><input id="northBypassShare" type="range" min="0" max="100" step="5" value="60"><small id="bypassExplanation">原规则的绕行目标比例</small></label><p class="fine" id="northBypassStatus">正在读取北侧绕行车流…</p>
+</section>
+<section class="card trend-card">
+  <div class="section-title"><h2>排队变化</h2><span id="elapsed" hidden>已模拟 00:00</span></div>
+  <svg id="chart" viewBox="0 0 290 70" role="img" aria-label="最近模拟过程中的排队车辆数"><path d="M0 60H290 M0 35H290 M0 10H290" stroke="#dce7f4" fill="none"/><path id="chartFill" fill="#ddecfc"/><path id="chartLine" fill="none" stroke="#2f77bc" stroke-width="2.5" stroke-linejoin="round"/></svg>
+  <div class="chart-caption"><span>较早</span><span id="chartMax">0 辆</span><span>现在</span></div>
+  <div class="detail-stats"><span>驶离地图 <b id="completed">0 辆</b></span><span>入口等待 <b id="pending">0 辆</b></span></div>
+  <p class="fine" id="trafficBehavior">变道 0 次 · 完成超车 0 次</p>
+</section>
+<section class="card junction-card">
+  <div class="section-title"><h2>路口观察</h2><button class="text-button" id="focusJunction">放大观察 ↗</button></div>
+  <button class="junction selected" data-junction="0" aria-pressed="true"><span class="junction-id">A</span><span class="junction-name"><strong>西侧路口</strong></span><span class="junction-count" id="westQueue">0<small>辆</small></span></button>
+  <button class="junction" data-junction="1" aria-pressed="false"><span class="junction-id">B</span><span class="junction-name"><strong>东侧路口</strong></span><span class="junction-count" id="eastQueue">0<small>辆</small></span></button>
+  <div class="junction-detail"><div><span id="junctionName">西侧路口</span><strong id="junctionStatus">观察中</strong></div><p id="junctionDetails">正在等待 0 辆 · 最长已等 0 秒</p></div>
+  <div class="phase-list" aria-label="当前路口的模拟通行节拍">
+    <div class="phase-row" id="forwardPhase"><span>来自 1</span><strong>—</strong><small>0 辆等待</small></div>
+    <div class="phase-row" id="reversePhase"><span>来自 2</span><strong>—</strong><small>0 辆等待</small></div>
+  </div>
+  <p class="turn-summary" id="turnDetails">左转 0 · 直行 0 · 右转 0</p>
+</section>
+<section class="card signal-card" aria-label="A 西侧路口红绿灯">
+  <div class="section-title"><h2>A路口红绿灯</h2><button class="text-button" id="focusWestSignal">观察 A ↗</button></div>
+  <div class="segmented signal-modes"><button data-signal-mode="adaptive" class="selected" aria-pressed="true">自动调控</button><button data-signal-mode="fixed" aria-pressed="false">固定配时</button></div>
+  <div class="signal-row" id="westSouthSignal" data-color="green"><span>南向</span><span class="lamps"><i class="red"></i><i class="yellow"></i><i class="green"></i></span><strong>绿灯</strong><small>0 辆等候</small></div>
+  <div class="signal-row" id="westCrossSignal" data-color="red"><span>西向</span><span class="lamps"><i class="red"></i><i class="yellow"></i><i class="green"></i></span><strong>红灯</strong><small>0 辆等候</small></div>
+  <p class="signal-reason" id="signalReason">根据队列和等待时间分配绿灯</p><p class="fine" id="signalMetrics">A 平均排队 — · 平均等待 —</p>
+</section>
+</aside>
+</div>
+<footer><p id="dataSourceNote">数据来自交通仿真，仅供方案比较。</p><button class="text-button" id="export">导出数据 ↓</button></footer>
+</main>
+</div>
+<script type="module" src="/app.mjs"></script>
+</body></html>

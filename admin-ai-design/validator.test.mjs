@@ -1,0 +1,18 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import vm from 'node:vm';
+const code=await readFile(new URL('./validate-response.js',import.meta.url),'utf8');
+const sandbox={};vm.createContext(sandbox);vm.runInContext(code,sandbox);
+const cases=JSON.parse(await readFile(new URL('./cases.json',import.meta.url),'utf8'));
+const query=cases[0].query;
+const base={protocol:'campus-admin-v1',status:'ok',intent:'set',state_version:query.state.stateVersion,reply:'准备调整模拟参数。',changes:{northBypassShare:80,westSignalMode:'adaptive'},suggested_settings:{},evidence:['settings.northBypassShare']};
+const run=(result=base,q=query)=>JSON.parse(sandbox.main({query:JSON.stringify(q),model_output:typeof result==='string'?result:JSON.stringify(result)}).output_json);
+test('合法多参数命令保留绝对值，并由校验器生成尚未执行的说明',()=>{const r=run({...base,reply:'已调整成功'});assert.equal(r.status,'ok');assert.deepEqual(r.changes,base.changes);assert.match(r.reply,/尚未执行/);assert.doesNotMatch(r.reply,/已调整成功/);});
+test('越界、类型错误、未知键及安全灯秒数均拒绝整个变更',()=>{for(const changes of [{northBypassShare:150,motorDemand:8},{demand:0},{electric:'40'},{yellow:0},{branchShare:40}]){const r=run({...base,changes});assert.equal(r.status,'invalid_request');assert.deepEqual(r.changes,{});}});
+test('无状态、错误来源和缺少参数均不能返回可执行命令',()=>{for(const state of [null,{...query.state,source:'live'},{...query.state,settings:{demand:30}}]){assert.equal(run(base,{...query,state}).status,'missing_data');}});
+test('格式错误、额外键、旧状态版本和不存在的证据均阻断',()=>{for(const r of ['```json\n{}\n```',{...base,extra:'yes'},{...base,state_version:'old'},{...base,evidence:['metrics.predictedReduction']}]){assert.equal(run(r).status,'invalid_request');}});
+test('建议和非ok结果不能夹带可执行changes',()=>{for(const r of [{...base,intent:'suggest'},{...base,status:'need_clarification'},{...base,intent:'inspect'}]){assert.equal(run(r).status,'invalid_request');}});
+test('建议保留于suggested_settings，不会变成执行命令',()=>{const r=run({...base,intent:'suggest',changes:{},suggested_settings:{northBypassShare:60}});assert.equal(r.status,'ok');assert.deepEqual(r.changes,{});assert.deepEqual(r.suggested_settings,{northBypassShare:60});});
+test('执行方案必须与本轮context中的方案完全一致',()=>{const c=cases.find(c=>c.id==='04-apply');const r=run({...base,intent:'apply_proposal',changes:c.expected.changes},c.query);assert.equal(r.status,'ok');assert.equal(run({...base,intent:'apply_proposal',changes:{northBypassShare:80}},c.query).status,'need_clarification');});
+test('旧场景、已改参数、缺失方案都拒绝执行',()=>{const c=cases.find(c=>c.id==='04-apply');for(const context of [{pendingProposal:null},{pendingProposal:{...c.query.context.pendingProposal,runId:'old'}},{pendingProposal:{...c.query.context.pendingProposal,baseSettings:{...query.state.settings,demand:12}}}]){assert.equal(run({...base,intent:'apply_proposal',changes:c.expected.changes},{...c.query,context}).status,'need_clarification');}});

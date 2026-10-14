@@ -1,0 +1,93 @@
+{
+  "source": "synthetic-simulation",
+  "results": [
+    {
+      "name": "默认高峰",
+      "seed": 20261012,
+      "settings": {
+        "demand": 30,
+        "electric": 70,
+        "motorDemand": 6,
+        "northDemand": 8,
+        "outbound": 72
+      },
+      "horizonSeconds": 600,
+      "baseline": {
+        "averageQueue": 30.33333333335598,
+        "averageWait": 47.153588516746325,
+        "passedA": 209,
+        "remainingQueueA": 117,
+        "averageQueueB": 2.283333333333333,
+        "departed": 230,
+        "pending": 25,
+        "share": 0,
+        "active": 0,
+        "eligibleGenerated": 259,
+        "divertedGenerated": 0,
+        "safeRouteChanges": 0,
+        "lastChangedAt": 0
+      },
+      "diverted": {
+        "averageQueue": 5.516833333329518,
+        "averageWait": 18.093220338983155,
+        "passedA": 177,
+        "remainingQueueA": 1,
+        "averageQueueB": 4.511666666666667,
+        "departed": 274,
+        "pending": 1,
+        "share": 60,
+        "active": 99,
+        "eligibleGenerated": 259,
+        "divertedGenerated": 164,
+        "safeRouteChanges": 5,
+        "lastChangedAt": 0
+      },
+      "queueReductionPercent": 81.81263736266352,
+      "waitReductionPercent": 61.629176255466845
+    },
+    {
+      "name": "南向偏重高峰",
+      "seed": 20261013,
+      "settings": {
+        "demand": 50,
+        "electric": 70,
+        "motorDemand": 12,
+        "northDemand": 8,
+        "outbound": 80
+      },
+      "horizonSeconds": 600,
+      "baseline": {
+        "averageQueue": 33.298499999979164,
+        "averageWait": 53.65817307692285,
+        "passedA": 208,
+        "remainingQueueA": 95,
+        "averageQueueB": 2.145,
+        "departed": 247,
+        "pending": 264,
+        "share": 0,
+        "active": 0,
+        "eligibleGenerated": 469,
+        "divertedGenerated": 0,
+        "safeRouteChanges": 0,
+        "lastChangedAt": 0
+      },
+      "diverted": {
+        "averageQueue": 7.167166666662711,
+        "averageWait": 19.2843750000001,
+        "passedA": 192,
+        "remainingQueueA": 0,
+        "averageQueueB": 5.3966666666666665,
+        "departed": 306,
+        "pending": 214,
+        "share": 60,
+        "active": 104,
+        "eligibleGenerated": 469,
+        "divertedGenerated": 267,
+        "safeRouteChanges": 7,
+        "lastChangedAt": 0
+      },
+      "queueReductionPercent": 78.47600742776042,
+      "waitReductionPercent": 64.060694030051
+    }
+  ]
+}
