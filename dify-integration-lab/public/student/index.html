@@ -23,7 +23,7 @@
     <section class="chat-panel" aria-labelledby="chat-title">
       <div class="chat-header"><div><span class="assistant-mark"><svg><use href="#spark"/></svg></span><h2 id="chat-title">路线建议</h2></div><button class="reset-button" id="reset-chat">新对话</button></div>
       <div class="conversation" id="conversation" aria-live="polite" aria-relevant="additions">
-        <div class="welcome" id="welcome"><div class="welcome-icon"><svg><use href="#spark"/></svg></div><h3>今天想怎么走？</h3><div class="suggestions"><button data-question="哪条路更快？">哪条路更快？<svg><use href="#arrow"/></svg></button><button data-question="哪条路距离更短？">哪条路更近？<svg><use href="#arrow"/></svg></button><button data-question="我赶时间，帮我选一条路。">我赶时间，帮我选<svg><use href="#arrow"/></svg></button></div></div>
+        <div class="welcome" id="welcome"><div class="welcome-icon"><svg><use href="#spark"/></svg></div><h3>今天想怎么走？</h3><p>选好行程，比较三条路线的用时与距离。</p><div class="suggestions"><button data-question="哪条路更快？">哪条路更快？<svg><use href="#arrow"/></svg></button><button data-question="哪条路距离更短？">哪条路更近？<svg><use href="#arrow"/></svg></button><button data-question="我赶时间，帮我选一条路。">我赶时间，帮我选<svg><use href="#arrow"/></svg></button></div></div>
       </div>
       <div class="composer-area"><p class="status" id="status" role="status" hidden></p><form id="question-form"><label class="sr-only" for="question">向出行 AI 提问</label><textarea id="question" rows="1" maxlength="1000" placeholder="问问 AI：现在走哪条路更合适？"></textarea><button id="send" type="submit" aria-label="发送问题"><svg><use href="#send-icon"/></svg></button></form></div>
     </section>

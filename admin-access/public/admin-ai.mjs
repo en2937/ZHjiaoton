@@ -1,6 +1,7 @@
+import {uiMotion} from '/app.mjs';
 const $=id=>document.getElementById(id),panel=$('adminAssistant'),log=$('adminAiLog'),question=$('adminAiQuestion');
 function identifier(){if(globalThis.crypto?.randomUUID)return crypto.randomUUID();const bytes=new Uint8Array(16);crypto.getRandomValues(bytes);return Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');}
-const chatId=identifier();let busy=false,configured=false,composing=false,lastState=null,timer=null,proposalButtons=[],statusBusy=false,statusEpoch=0,statusError=false;
+const chatId=identifier();let busy=false,configured=false,composing=false,lastState=null,timer=null,proposalButtons=[],statusBusy=false,statusEpoch=0,statusError=false,panelOpen=false;
 const parameterLabels={demand:'骑行车流',motorDemand:'机动车流',northDemand:'北侧来车',electric:'电动车占比',outbound:'地点1来车占比',northBypassShare:'北侧绕行策略',guidanceCoverage:'引导覆盖',westSignalMode:'A 路口配时',adaptive:'自动调控',fixed:'固定配时'};
 const readableReply=text=>text.replace(/\b(demand|motorDemand|northDemand|electric|outbound|northBypassShare|guidanceCoverage|westSignalMode|adaptive|fixed)\b/g,key=>parameterLabels[key]);
 function setupPanelMovement(){
@@ -19,15 +20,15 @@ function setupPanelMovement(){
  function save(){try{if(position)sessionStorage.setItem(storageKey,JSON.stringify(position));else sessionStorage.removeItem(storageKey);}catch{}}
  function fit(){if(!panel.hidden&&position){paint(position.x,position.y);save();}}
  function finish(){if(!drag)return;if(frame){cancelAnimationFrame(frame);frame=0;}if(pending){paint(pending.x,pending.y,drag.limits);pending=null;}drag=null;panel.classList.remove('is-dragging');save();}
- function reset(){finish();position=null;panel.classList.remove('is-positioned');panel.style.removeProperty('left');panel.style.removeProperty('top');save();}
+ function reset(){finish();uiMotion.layout([panel],()=>{position=null;panel.classList.remove('is-positioned');panel.style.removeProperty('left');panel.style.removeProperty('top');save();});}
  function move(dx,dy){const rect=panel.getBoundingClientRect();paint(rect.left+dx,rect.top+dy);save();}
  for(const [label,dx,dy]of [['左移',-32,0],['上移',0,-32],['下移',0,32],['右移',32,0],['归位',0,0]]){
   const button=document.createElement('button');button.type='button';button.textContent=label;button.onclick=()=>label==='归位'?reset():move(dx,dy);options.append(button);
  }
- toggle.onclick=()=>{options.hidden=!options.hidden;toggle.setAttribute('aria-expanded',String(!options.hidden));};
+ toggle.onclick=()=>uiMotion.layout(panel.children,()=>{options.hidden=!options.hidden;toggle.setAttribute('aria-expanded',String(!options.hidden));});
  header.addEventListener('pointerdown',event=>{
   if(!event.isPrimary||event.button!==0||event.target.closest('button,a,input,textarea,select'))return;
-  const rect=panel.getBoundingClientRect();drag={id:event.pointerId,x:event.clientX,y:event.clientY,left:rect.left,top:rect.top,limits:bounds()};
+  uiMotion.stop(panel);const rect=panel.getBoundingClientRect();drag={id:event.pointerId,x:event.clientX,y:event.clientY,left:rect.left,top:rect.top,limits:bounds()};
   header.setPointerCapture(event.pointerId);header.focus({preventScroll:true});event.preventDefault();
  });
  header.addEventListener('pointermove',event=>{
@@ -59,7 +60,7 @@ function message(text,{user=false,pending=false}={}){
  const article=document.createElement('article');article.className='ai-message'+(user?' is-user':'')+(pending?' is-pending':'');
  const label=document.createElement('span');label.className='ai-message-label';label.textContent=user?'管理员':'交通助手';
  const body=document.createElement('div');body.className='ai-message-body';body.textContent=text;article.append(label,body);log.append(article);
- while(log.querySelectorAll('article').length>30)log.querySelector('article').remove();log.scrollTop=log.scrollHeight;return {article,body};
+ while(log.querySelectorAll('article').length>30)log.querySelector('article').remove();uiMotion.reveal(article,{y:4,duration:.18});log.scrollTop=log.scrollHeight;return {article,body};
 }
 function showChanges(body,changes){if(!changes?.length)return;const list=document.createElement('div');list.className='ai-change-list';for(const row of changes){const line=document.createElement('div');line.textContent=row.label+'：'+row.beforeText+' → '+row.afterText;list.append(line);}body.append(list);}
 function invalidateButtons(){for(const b of proposalButtons)b.disabled=true;proposalButtons=[];}
@@ -90,13 +91,18 @@ async function send(action='chat',text=question.value.trim()){
    if(data.proposal?.changes?.length){showChanges(pending.body,data.proposal.changes);const actions=document.createElement('div');actions.className='ai-proposal-actions';for(const [label,kind]of [['执行方案','apply'],['取消方案','cancel']]){const button=document.createElement('button');button.type='button';button.textContent=label;button.onclick=()=>send(kind);actions.append(button);proposalButtons.push(button);}pending.body.append(actions);}
    const time=document.createElement('span');time.className='ai-snapshot';time.textContent=new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date(data.queryTime));pending.article.append(time);
   }
+  if(pending.article.isConnected)uiMotion.reveal(pending.article,{y:4,duration:.18});
+  if(['applied','undone'].includes(data.kind)&&data.changes?.length){
+   const ids={demand:'demand',electric:'electricRatio',motorDemand:'motorDemand',northDemand:'northDemand',northBypassShare:'northBypassShare',guidanceCoverage:'guidanceCoverage'};
+   uiMotion.feedback(data.changes.map(row=>row.key==='westSignalMode'?document.querySelector('.signal-modes'):$(ids[row.key])?.closest('.field')).filter(Boolean));
+  }
   if(action==='chat')question.value='';log.scrollTop=log.scrollHeight;
  }catch(e){pending.article.remove();error(e.message||'未能取得执行结果，请查看当前参数后重试。');}
  finally{busy=false;controls();question.focus();void status();}
 }
-function open(){panel.hidden=false;movement.fit();$('adminAiOpen').setAttribute('aria-expanded','true');void status();clearInterval(timer);timer=setInterval(status,3000);question.focus();}
-function close(){movement.finish();panel.hidden=true;$('adminAiOpen').setAttribute('aria-expanded','false');clearInterval(timer);timer=null;$('adminAiOpen').focus();}
-$('adminAiOpen').onclick=()=>panel.hidden?open():close();$('adminAiClose').onclick=close;
+function open(){uiMotion.stop(panel);panelOpen=true;panel.hidden=false;panel.inert=false;movement.fit();uiMotion.reveal(panel,{y:12});$('adminAiOpen').setAttribute('aria-expanded','true');void status().then(()=>{if(panelOpen&&document.activeElement===$('adminAiOpen'))question.focus({preventScroll:true});});clearInterval(timer);timer=setInterval(status,3000);question.focus({preventScroll:true});}
+function close(){movement.finish();uiMotion.stop(panel);panelOpen=false;panel.inert=true;$('adminAiOpen').setAttribute('aria-expanded','false');clearInterval(timer);timer=null;$('adminAiOpen').focus({preventScroll:true});uiMotion.hide(panel,()=>{panel.hidden=true;panel.inert=false;});}
+$('adminAiOpen').onclick=()=>panelOpen?close():open();$('adminAiClose').onclick=close;
 $('adminAiForm').onsubmit=e=>{e.preventDefault();void send();};$('adminAiUndo').onclick=()=>send('undo');$('adminAiClear').onclick=()=>send('clear');
 question.addEventListener('compositionstart',()=>composing=true);question.addEventListener('compositionend',()=>composing=false);
 question.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&!composing){e.preventDefault();void send();}});

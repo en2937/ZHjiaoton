@@ -5,6 +5,7 @@
 <meta name="description" content="浙江大学紫金港校区交通模拟沙盘：展示上课高峰期间，1、2 两点间电动车、自行车与机动车的双向通行及路口排队。">
 <title>紫金港 · 校园交通沙盘</title>
 <link rel="stylesheet" href="/style.css">
+<script type="module" src="/app.mjs" blocking="render"></script>
 </head>
 <body>
 <div class="shell">
@@ -27,9 +28,9 @@
     <div class="map-label"><span>紫金港校区</span></div>
     <div class="map-tools"><button id="zoomIn" aria-label="放大地图">＋</button><button id="zoomOut" aria-label="缩小地图">−</button></div>
     <div class="map-hint">拖动平移 · 滚轮缩放 · 点击路口查看</div>
-    <div class="legend"><span><i class="electric"></i> 电动车</span><span><i class="bicycle"></i> 自行车</span><span><i class="motor"></i> 机动车</span><span><i class="roundabout"></i> 通行路线</span><span><i class="queue"></i> 等待车辆</span><span><i style="background:#00aac1"></i> 变道中</span><span><i class="extension"></i> 示意道路</span></div>
     <p class="error" id="mapError" hidden>地图加载失败，请刷新重试。</p>
   </div>
+  <div class="legend" aria-label="地图图例"><span><i class="electric"></i> 电动车</span><span><i class="bicycle"></i> 自行车</span><span><i class="motor"></i> 机动车</span><span><i class="roundabout"></i> 通行路线</span><span><i class="queue"></i> 等待车辆</span><span><i style="background:#00aac1"></i> 变道中</span><span><i class="extension"></i> 示意道路</span></div>
   <div class="playback">
     <button class="primary" id="play" aria-label="暂停模拟">Ⅱ <span>暂停</span></button>
     <button class="secondary" id="reset">↺ 重置</button>
@@ -61,7 +62,7 @@
   <label class="field" for="electricRatio"><span>电动车占比 <output id="electricValue">70%</output></span><input id="electricRatio" type="range" min="0" max="100" step="5" value="70"></label>
   <label class="field" for="motorDemand"><span>机动车流 <output id="motorValue">6 辆/分钟</output></span><input id="motorDemand" type="range" min="0" max="20" step="1" value="6"></label>
   <label class="field" for="northDemand"><span>北侧来车 <output id="northValue">8 辆/分钟</output></span><input id="northDemand" type="range" min="0" max="20" step="1" value="8"></label>
-  <label class="field" for="behaviorMode"><span>选路规则</span><select id="behaviorMode"><option value="original">原选路规则</option><option value="grouped">认知与意愿分组</option></select></label>
+  <div class="field behavior-rule"><span id="behaviorModeLabel">选路规则</span><output id="behaviorMode" aria-labelledby="behaviorModeLabel">原选路规则</output></div>
   <label class="field" id="guidanceField" for="guidanceCoverage" hidden><span>引导覆盖 <output id="guidanceValue">0%</output></span><input id="guidanceCoverage" type="range" min="0" max="100" step="5" value="0"><small>向可绕行学生提供路线信息；不代表接受率</small></label>
   <p class="fine" id="behaviorStats" hidden></p>
   <label class="field" for="northBypassShare"><span><span id="bypassLabel">北侧环岛绕行 A</span> <output id="northBypassValue">60%</output></span><input id="northBypassShare" type="range" min="0" max="100" step="5" value="60"><small id="bypassExplanation">原规则的绕行目标比例</small></label><p class="fine" id="northBypassStatus">正在读取北侧绕行车流…</p>
@@ -96,5 +97,4 @@
 <footer><p id="dataSourceNote">数据来自交通仿真，仅供方案比较。</p><button class="text-button" id="export">导出数据 ↓</button></footer>
 </main>
 </div>
-<script type="module" src="/app.mjs"></script>
 </body></html>

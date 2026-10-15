@@ -15,7 +15,7 @@ test('observation times include both bounds of each period and reject out-of-per
 });
 test('late observation equals full continuous pre-roll; early demand remains counted',async()=>{
  const runtime=new SharedSimulation({running:false,settings,seed:42});
- const reference=new Simulation({seed:42,settings,departureScenario:config});reference.step(2700);
+ const reference=new Simulation({seed:42,settings:{...settings,behaviorMode:'grouped'},departureScenario:config});reference.step(2700);
  const original=runtime.sim,preparation=runtime.controlAsync({action:'departureScenario',config});
  assert.equal(runtime.sim,original);assert.equal(runtime.sim.time,0);
  await preparation;assert.deepEqual(structuredClone(runtime.sim),structuredClone(reference));

@@ -54,3 +54,9 @@ node --test dify-integration-lab/tests/integration.test.mjs dify-integration-lab
 独立管理员应用已发布；API基础地址https://dify-api.zju.edu.cn/v1，密钥只在private/dify-admin.json的apiKey字段或服务端DIFY_ADMIN_API_KEY环境变量中。不要放入前端、导出证据或聊天。配置文件可热读取，无需为替换有效配置而重启沙盘。每次重启管理员入口仍需重新登录。测试与恢复记录见AI_VALIDATION.md。
 
 自动测试：node --test admin-access/tests/ai.test.mjs。真实学校接口在独立沙盘测试：node admin-access/tests/live-ai.mjs；真实部署只读检查：node admin-access/tests/live-web.mjs。browser-fixture.mjs必须显式--mock才使用测试回答，仅用于隔离UI回归，不能部署到产品入口。deploy-ai.ps1仅在服务身份核实后更新沙盘和管理员入口，保存完整检查点并逐字段核对恢复；校园网地址以runtime.json和实际网卡为准。
+
+## 登录页背景动画（2026-10-15）
+
+登录页已加入本地静态校园底图的 GSAP 缓慢平移动画。提供暂停/播放，支持减少动态效果，表单保持静止。详情、截图、限制和回退位置见 [登录动画验收](LOGIN_MOTION_VALIDATION.md)。
+
+后续请编辑 `client/login.css`、`client/login-motion.mjs` 和 `client/login-form.mjs`，再从项目根目录运行 `node admin-access/build-login.mjs`。生成的 `public/login.css` 与 `public/login.mjs` 可直接刷新加载；GSAP随文件本地提供，无需CDN或npm安装。

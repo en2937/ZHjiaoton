@@ -16,6 +16,7 @@
 # Backups, runtime dependencies, and caches
 _backup*/
 **/_backup*/
+_work/
 **/.venv/
 **/node_modules/
 **/__pycache__/
