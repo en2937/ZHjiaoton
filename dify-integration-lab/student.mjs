@@ -25,7 +25,10 @@ export function futureQuestion(question) {
 }
 
 export function studentEnvelope(question,state,preference) {
-  return JSON.stringify({protocol:'campus-student-v1',question,state,
+  const compact={schemaVersion:state.schemaVersion,stateVersion:state.stateVersion,runId:state.runId,
+    source:state.source,origin:state.origin,destination:state.destination,mode:state.mode,
+    routes:state.routes.map(({id,name,travelTimeSeconds,distanceMeters})=>({id,name,travelTimeSeconds,distanceMeters})),limitations:state.limitations};
+  return JSON.stringify({protocol:'campus-student-v1',question,state:compact,
     preference,outputFormat:{status:'ok | missing_data | out_of_scope',criterion:'time | distance',recommended_route_id:state.routes.map(r=>r.id).join(' | ')+' | null'},
     instruction:'师生端只要路线选择，不要长解释。只返回所约定的JSON；时间和距离由网页读取本轮state显示。问题中的明确时间/距离偏好优先于preference。未提供目的地或未来数据时不能借用其他线路。'});
 }
@@ -35,6 +38,7 @@ export function parseStudentReply(text,state) {
   if (raw.startsWith('```')) raw=raw.replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'');
   let result;
   try {result=JSON.parse(raw);} catch {return null;}
+  if(!result||typeof result!=='object'||Array.isArray(result))return null;
   if (!['ok','missing_data','out_of_scope'].includes(result.status)) return null;
   if (result.status!=='ok') return {status:result.status,criterion:null,recommendedRouteId:null};
   if (!['time','distance'].includes(result.criterion) || !state.routes.some(r=>r.id===result.recommended_route_id)) return null;

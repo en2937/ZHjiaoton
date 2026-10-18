@@ -2,6 +2,7 @@ import http from 'node:http';
 import os from 'node:os';
 import {fileURLToPath} from 'node:url';
 import {createGzip} from 'node:zlib';
+import {randomUUID} from 'node:crypto';
 
 const sandboxFiles = new Set(['/', '/index.html', '/style.css', '/app.mjs', '/engine.mjs',
   '/route.mjs', '/shared-client.mjs', '/assets/Map.png', '/assets/zju-emblem.png', '/api/simulation']);
@@ -29,18 +30,23 @@ export function visitorHtml(html, student = false) {
 }
 
 export function createCampusServer({host, port = 4180, sandboxPort = 4173, studentPort = 4183,
-  allowAddress = allowedCampusAddress, chatLimit = 8, chatConcurrency = 4} = {}) {
+  allowAddress = allowedCampusAddress, chatLimit = 60, chatConcurrency = 32} = {}) {
   if (!host) throw new Error('需要指定校园网 IPv4 地址');
+  if (![chatLimit, chatConcurrency].every(value => Number.isInteger(value) && value > 0))
+    throw new Error('提问容量配置无效');
   const authority = host + ':' + port;
   const origin = 'http://' + authority;
   const rates = new Map();
   let activeChats = 0;
   const server = http.createServer(async (req, res) => {
+    const suppliedId = req.headers['x-request-id'];
+    const requestId = typeof suppliedId === 'string' && /^[a-zA-Z0-9._:-]{1,100}$/.test(suppliedId) ? suppliedId : randomUUID();
     const send = (status, data, extra = {}) => {
       if (res.destroyed) return;
       res.writeHead(status, {'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store',
-        'X-Content-Type-Options': 'nosniff', ...extra});
-      res.end(JSON.stringify(data));
+        'X-Content-Type-Options': 'nosniff', 'X-Request-ID': requestId, ...extra});
+      const codes = {400:'invalid_request',403:'forbidden',404:'not_found',413:'request_too_large',415:'unsupported_media_type',429:'rate_limited',502:'upstream_unavailable'};
+      res.end(JSON.stringify(status >= 400 ? {status:'error',error:codes[status] || 'gateway_error',requestId,...data} : data));
     };
     if (!allowAddress(req.socket.remoteAddress)) return send(403, {message: '仅接受校园网内访问'});
     if (req.headers.host !== authority) return send(403, {message: '请使用启动时显示的校园网网址'});
@@ -68,8 +74,10 @@ export function createCampusServer({host, port = 4180, sandboxPort = 4173, stude
       for (const [key, value] of rates) if (now - value.start >= 60000) rates.delete(key);
       const key = req.socket.remoteAddress;
       const rate = rates.get(key) || {start: now, count: 0};
-      if (rate.count >= chatLimit || activeChats >= chatConcurrency)
-        return send(429, {message: '提问较多，请稍后重试'}, {'Retry-After': '60'});
+      if (rate.count >= chatLimit)
+        return send(429, {error:'rate_limited',message: '提问较多，请稍后重试'}, {'Retry-After': String(Math.max(1,Math.ceil((rate.start+60000-now)/1000)))});
+      if (activeChats >= chatConcurrency)
+        return send(429, {error:'gateway_busy',message: '提问较多，请稍后重试'}, {'Retry-After': '1'});
       if (!rates.has(key) && rates.size >= 1024)
         return send(429, {message: '访问较多，请稍后重试'}, {'Retry-After': '60'});
       rate.count++; rates.set(key, rate); activeChats++;
@@ -87,7 +95,7 @@ export function createCampusServer({host, port = 4180, sandboxPort = 4173, stude
       } catch {releaseChat(); return send(400, {message: '请求中断'});}
     }
     const upstreamPort = isStudent ? studentPort : sandboxPort;
-    const headers = {Host: '127.0.0.1:' + upstreamPort};
+    const headers = {Host: '127.0.0.1:' + upstreamPort, 'X-Request-ID': requestId};
     // The gateway checks the external origin before supplying the local origin
     // required by the existing loopback services. Private services stay loopback-only.
     if (req.headers.origin) headers.Origin = 'http://127.0.0.1:' + upstreamPort;
@@ -97,7 +105,9 @@ export function createCampusServer({host, port = 4180, sandboxPort = 4173, stude
       const type = reply.headers['content-type'] || 'application/octet-stream';
       const responseHeaders = {'Content-Type': type, 'Cache-Control': 'no-store',
         'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer',
+        'X-Request-ID': reply.headers['x-request-id'] || requestId,
         'Content-Security-Policy': "default-src 'self'; connect-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'"};
+      if (reply.headers['retry-after']) responseHeaders['Retry-After'] = reply.headers['retry-after'];
       reply.on('error', () => {releaseChat(); res.destroy();});
       if (type.includes('text/html')) {
         const chunks = []; let size = 0;
@@ -125,7 +135,7 @@ export function createCampusServer({host, port = 4180, sandboxPort = 4173, stude
         } else reply.pipe(res);
       }
     });
-    upstream.setTimeout(70000, () => upstream.destroy(new Error('timeout')));
+    upstream.setTimeout(isChat ? 15000 : 70000, () => upstream.destroy(new Error('timeout')));
     upstream.on('error', () => {
       releaseChat();
       if (!res.headersSent) send(502, {message: '项目服务暂时不可用，请管理员检查本机沙盘和问答服务'});

@@ -27,7 +27,7 @@ async function setup(t){
   const criterion=input.question.includes('近')?'distance':input.preference,field=criterion==='time'?'travelTimeSeconds':'distanceMeters';
   const best=[...input.state.routes].sort((a,b)=>a[field]-b[field])[0];
   res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({answer:JSON.stringify({status:'ok',criterion,recommended_route_id:best.id,travelTimeSeconds:99999}),conversation_id:'sandbox-test'}));});
- const upstreamBase=await listen(upstream),studentProvider=createSandboxClient({base:sandboxBase});
+ const upstreamBase=await listen(upstream),studentProvider=createSandboxClient({base:sandboxBase,cacheMs:0});
  const lab=createLabServer(async()=>({apiBase:upstreamBase+'/v1',apiKey:'only-a-test-key',allowLoopback:true}),{studentProvider}),base=await listen(lab);
  t.after(async()=>{await stop(lab);await stop(upstream);await stop(sandbox);});
  const post=async(body,path='/api/student/chat',url=base)=>{const res=await fetch(url+path,{method:'POST',headers:{'Content-Type':'application/json',...(path==='/api/control'?{'X-Admin-Control-Key':'test-control-key'}:{})},body:JSON.stringify(body)});return {status:res.status,data:await res.json()};};
@@ -46,12 +46,14 @@ test('两个沙盘视图共享参数、暂停和重置，C端读取同一版本'
  const old=(await h.state()).runId;await clients[0].command({action:'reset'});const reset=await h.state();assert.notEqual(reset.runId,old);assert.equal(reset.simulationTimeSeconds,0);assert.equal(reset.settings.demand,44);
 });
 test('每轮AI输入为实时沙盘状态，不能用fixture或模型数字替代',async t=>{
- const h=await setup(t),first=await h.ask({fixtureId:'B'});assert.equal(first.status,200);assert.equal(first.data.routes.length,3);
+ const h=await setup(t),first=await h.ask({fixtureId:'B',question:'请比较当前行程的耗时'});assert.equal(first.status,200);assert.equal(first.data.routes.length,3);
  assert.equal(first.data.source,'traffic-sandbox-live');assert.equal(first.data.routes.find(r=>r.id==='main').distanceMeters,1200);assert.equal(JSON.stringify(first.data).includes('99999'),false);
  h.runtime.sim.step(60);h.runtime.control({action:'settings',settings:{demand:50,westSignalMode:'fixed'}});
- const second=await h.ask();assert.equal(second.status,200);assert.notEqual(first.data.stateVersion,second.data.stateVersion);
- assert.equal(h.calls[1].state.settings.demand,50);assert.equal(h.calls[1].state.settings.westSignalMode,'fixed');assert.equal(h.calls[1].state.metrics.time,h.runtime.sim.time);
- assert.deepEqual(second.data.routes,h.calls[1].state.routes);assert.equal(h.calls[1].state.source,'traffic-sandbox-live');
+ const second=await h.ask({question:'请比较当前行程的耗时'});assert.equal(second.status,200);assert.notEqual(first.data.stateVersion,second.data.stateVersion);
+ assert.equal(second.data.settings.demand,50);assert.equal(second.data.settings.westSignalMode,'fixed');
+ assert.equal(h.calls[1].state.settings,undefined);assert.equal(h.calls[1].state.metrics,undefined);
+ assert.equal(second.data.stateVersion,h.calls[1].state.stateVersion);assert.equal(h.calls[1].state.source,'traffic-sandbox-live');
+ assert.deepEqual(second.data.routes.map(({id,name,travelTimeSeconds,distanceMeters})=>({id,name,travelTimeSeconds,distanceMeters})),h.calls[1].state.routes);
  const near=await h.ask({question:'哪条路更近？'});assert.equal(near.data.criterion,'distance');assert.equal(near.data.recommendedRouteId,'main');
 });
 test('真实队列和灯色改变本轮路线估计，绕开A的北侧环岛线不计A等待',async t=>{

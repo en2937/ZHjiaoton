@@ -39,7 +39,7 @@ async function harness(t) {
 }
 const message=(fixtureId,sessionId='session-alpha')=>({fixtureId,sessionId,question:'现在主路和环岛怎么选？'});
 
-test('同一会话每轮传新状态并保留 Dify 会话，中文流式分片完整',async t=>{
+test('同一会话每轮传新状态但不累积 Dify 历史，中文流式分片完整',async t=>{
   const h=await harness(t),a=await h.post(message('A')),b=await h.post(message('B'));
   assert.equal(a.status,200);assert.equal(b.status,200);
   assert.match(a.data.answer,/fixture-A.*主路300模拟秒.*环岛180模拟秒/);
@@ -47,7 +47,7 @@ test('同一会话每轮传新状态并保留 Dify 会话，中文流式分片�
   assert.equal(h.calls[0].auth,'Bearer secret-test-key');
   assert.equal(h.calls[0].body.response_mode,'streaming');
   assert.equal(h.calls[0].body.conversation_id,undefined);
-  assert.equal(h.calls[1].body.conversation_id,'conversation-1');
+  assert.equal(h.calls[1].body.conversation_id,undefined);
   assert.equal(h.calls[0].body.user,h.calls[1].body.user);
   assert.equal(JSON.parse(h.calls[1].body.query).state.stateVersion,'fixture-B');
   assert.equal(b.data.provider,'school-dify');
