@@ -115,3 +115,50 @@ test('large requests and unavailable backends fail clearly', async () => {
       headers: {'Content-Type': 'application/json'}, body: 'x'.repeat(32769)})).status, 413);
   } finally {await close(gateway);}
 });
+
+test('default gateway admits thirty simultaneous questions, bounds thirty-two and returns structured errors', async () => {
+  let finish;const gate=new Promise(resolve=>finish=resolve);let arrived=0;
+  const student=http.createServer(async(req,res)=>{req.resume();await new Promise(r=>req.on('end',r));arrived++;await gate;
+    res.writeHead(200,{'Content-Type':'application/json'});res.end('{"status":"ok"}');});
+  const studentPort=await listen(student),gateway=createCampusServer({host:'127.0.0.1',studentPort,allowAddress:()=>true}),port=await listen(gateway);
+  const options={method:'POST',headers:{'Content-Type':'application/json'},body:'{}'};
+  const burst=Array.from({length:32},()=>request(port,'/api/student/chat',options));
+  try{
+    for(let i=0;i<100&&arrived<32;i++)await new Promise(r=>setTimeout(r,5));
+    assert.equal(arrived,32);
+    const busy=await request(port,'/api/student/chat',options);
+    assert.equal(busy.status,429);assert.equal(JSON.parse(busy.body).error,'gateway_busy');assert(busy.headers['retry-after']);
+    finish();assert((await Promise.all(burst)).every(r=>r.status===200));
+    for(let i=32;i<60;i++)assert.equal((await request(port,'/api/student/chat',options)).status,200);
+    const limited=await request(port,'/api/student/chat',options);
+    assert.equal(limited.status,429);assert.equal(JSON.parse(limited.body).error,'rate_limited');assert(limited.headers['retry-after']);
+  }finally{finish();await Promise.allSettled(burst);await close(gateway);await close(student);}
+});
+
+test('gateway preserves upstream Retry-After, request ids and JSON error bodies',async()=>{
+  let received;
+  const student=http.createServer((req,res)=>{received=req.headers['x-request-id'];req.resume();req.on('end',()=>{
+    res.writeHead(429,{'Content-Type':'application/json','Retry-After':'17','X-Request-ID':'upstream-id'});
+    res.end(JSON.stringify({status:'error',error:'ai_busy',requestId:'upstream-id',message:'请稍后重试'}));});});
+  const studentPort=await listen(student),gateway=createCampusServer({host:'127.0.0.1',studentPort,allowAddress:()=>true}),port=await listen(gateway);
+  try{
+    const result=await request(port,'/api/student/chat',{method:'POST',headers:{'Content-Type':'application/json','X-Request-ID':'caller-id'},body:'{}'});
+    assert.equal(result.status,429);assert.equal(result.headers['retry-after'],'17');assert.equal(result.headers['x-request-id'],'upstream-id');
+    assert.equal(received,'caller-id');assert.equal(JSON.parse(result.body).error,'ai_busy');
+    const invalid=await request(port,'/api/student/chat',{method:'POST'});assert.equal(JSON.parse(invalid.body).error,'unsupported_media_type');
+  }finally{await close(gateway);await close(student);}
+});
+
+test('disconnecting a downstream caller cancels its upstream request and releases gateway capacity',async()=>{
+  let observedClose;const closed=new Promise(r=>observedClose=r);let started;const ready=new Promise(r=>started=r);let calls=0;
+  const student=http.createServer((req,res)=>{req.resume();req.on('end',()=>{
+    if(++calls===1){res.once('close',observedClose);started();}
+    else {res.writeHead(200,{'Content-Type':'application/json'});res.end('{}');}
+  });});
+  const studentPort=await listen(student),gateway=createCampusServer({host:'127.0.0.1',studentPort,chatConcurrency:1,allowAddress:()=>true}),port=await listen(gateway);
+  try{
+    const pending=http.request({hostname:'127.0.0.1',port,path:'/api/student/chat',method:'POST',headers:{Host:'127.0.0.1:4180','Content-Type':'application/json'}});
+    pending.on('error',()=>{});pending.end('{}');await ready;pending.destroy();await closed;
+    assert.equal((await request(port,'/api/student/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).status,200);
+  }finally{await close(gateway);await close(student);}
+});

@@ -16,16 +16,16 @@
   <div class="workspace">
     <aside class="trip-panel" aria-labelledby="trip-title">
       <div class="panel-heading"><h2 id="trip-title">行程设置</h2></div>
-      <div class="place-fields"><div class="place-dots" aria-hidden="true"><i></i><b></b><i></i></div><div class="place-selects"><label for="origin">出发地</label><select id="origin"><option value="1">宿舍区附近</option><option value="2">教学区附近</option></select><label for="destination">目的地</label><select id="destination"><option value="2">教学区附近</option><option value="1">宿舍区附近</option></select></div><button class="swap-button" id="swap-places" aria-label="交换出发地和目的地"><svg><use href="#swap"/></svg></button></div>
+      <div class="place-fields"><div class="place-dots" aria-hidden="true"><i></i><b></b><i></i></div><div class="place-selects"><label for="origin">出发地</label><select id="origin"><option value="1">云峰学园</option><option value="2">东教学楼</option></select><label for="destination">目的地</label><select id="destination"><option value="2">东教学楼</option><option value="1">云峰学园</option></select></div><button class="swap-button" id="swap-places" aria-label="交换出发地和目的地"><svg><use href="#swap"/></svg></button></div>
       <fieldset><legend>怎么出发</legend><div class="mode-options"><button data-mode="electric" aria-pressed="true">电动车</button><button data-mode="bicycle" aria-pressed="false">自行车</button></div></fieldset>
       <fieldset><legend>更在意什么</legend><div class="preference-options"><button data-preference="time" aria-pressed="true"><svg><use href="#clock"/></svg>优先省时</button><button data-preference="distance" aria-pressed="false"><svg><use href="#route"/></svg>优先近路</button></div></fieldset>
     </aside>
     <section class="chat-panel" aria-labelledby="chat-title">
       <div class="chat-header"><div><span class="assistant-mark"><svg><use href="#spark"/></svg></span><h2 id="chat-title">路线建议</h2></div><button class="reset-button" id="reset-chat">新对话</button></div>
       <div class="conversation" id="conversation" aria-live="polite" aria-relevant="additions">
-        <div class="welcome" id="welcome"><div class="welcome-icon"><svg><use href="#spark"/></svg></div><h3>今天想怎么走？</h3><p>选好行程，比较三条路线的用时与距离。</p><div class="suggestions"><button data-question="哪条路更快？">哪条路更快？<svg><use href="#arrow"/></svg></button><button data-question="哪条路距离更短？">哪条路更近？<svg><use href="#arrow"/></svg></button><button data-question="我赶时间，帮我选一条路。">我赶时间，帮我选<svg><use href="#arrow"/></svg></button></div></div>
+        <div class="welcome" id="welcome"><div class="welcome-icon"><svg><use href="#spark"/></svg></div><h3>今天想怎么走？</h3><p>选好行程，比较路线或查询上课出发时间。</p><div class="suggestions"><button data-question="哪条路更快？">哪条路更快？<svg><use href="#arrow"/></svg></button><button data-question="哪条路距离更短？">哪条路更近？<svg><use href="#arrow"/></svg></button><button data-question="我想去东教上早八，我几点出发最好？">早八几点出发？<svg><use href="#arrow"/></svg></button></div></div>
       </div>
-      <div class="composer-area"><p class="status" id="status" role="status" hidden></p><form id="question-form"><label class="sr-only" for="question">向出行 AI 提问</label><textarea id="question" rows="1" maxlength="1000" placeholder="问问 AI：现在走哪条路更合适？"></textarea><button id="send" type="submit" aria-label="发送问题"><svg><use href="#send-icon"/></svg></button></form></div>
+      <div class="composer-area"><p class="status" id="status" role="status" hidden></p><form id="question-form"><label class="sr-only" for="question">向出行助手提问</label><textarea id="question" rows="1" maxlength="1000" placeholder="现在走哪条路更合适？"></textarea><button id="cancel-question" type="button" hidden>取消</button><button id="send" type="submit" aria-label="发送问题"><svg><use href="#send-icon"/></svg></button></form></div>
     </section>
   </div>
   <footer><p id="studentDataSourceNote">基于模拟数据，用时与距离为估算。</p></footer>

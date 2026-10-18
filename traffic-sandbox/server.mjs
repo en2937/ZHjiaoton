@@ -6,7 +6,10 @@ const root=fileURLToPath(new URL('./dist/',import.meta.url));
 import {SharedSimulation} from './shared-simulation.mjs';
 import {equalSecret} from '../admin-access/auth.mjs';
 const types={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.png':'image/png','.json':'application/json; charset=utf-8'};
-export function createSandboxServer({runtime=new SharedSimulation(),clock=true,controlKey}={}){
+export function createDefaultRuntime(options={}){
+ return new SharedSimulation({departureScenario:{mode:'survey',classTime:'08:00',observationTime:'07:00'},loopDefaultWindow:true,...options});
+}
+export function createSandboxServer({runtime=createDefaultRuntime(),clock=true,controlKey}={}){
 const server=http.createServer(async(req,res)=>{
  const send=(status,data)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(data));};
  try{
@@ -43,7 +46,7 @@ const restoreIndex=process.argv.indexOf('--restore-state');
 const initialPacket=restoreIndex>=0?JSON.parse(await readFile(process.argv[restoreIndex+1],'utf8')):undefined;
 const controlKey=(await readFile(new URL('../admin-access/private/bridge-key.txt',import.meta.url),'utf8')).trim();
 if(!/^[a-f0-9]{64}$/.test(controlKey))throw new Error('管理员内部配置无效，请使用项目启动脚本');
-const port=Number(process.env.PORT||4173),server=createSandboxServer({runtime:new SharedSimulation({initialPacket,preserveRunId:process.argv.includes('--preserve-run-id')}),controlKey});
+const port=Number(process.env.PORT||4173),server=createSandboxServer({runtime:createDefaultRuntime({initialPacket,preserveRunId:process.argv.includes('--preserve-run-id')}),controlKey});
 server.on('error',err=>{console.error(err.code==='EADDRINUSE'?'Port '+port+' is in use. Open http://127.0.0.1:'+port+' or set PORT to another value.':err.message);process.exitCode=1;});
 server.listen(port,'127.0.0.1',()=>console.log('Local shared sandbox: http://127.0.0.1:'+port));
 }

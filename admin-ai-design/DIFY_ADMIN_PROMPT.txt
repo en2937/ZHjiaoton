@@ -26,3 +26,9 @@ behavior缺失时status=missing_data，不猜新因素或生成引导覆盖操�
 
 旧服务兼容路径（仅输入protocol=campus-admin-v1）：过渡及回退期间沿用原七参数demand、motorDemand、northDemand、electric、outbound、northBypassShare、westSignalMode与上述相同范围；不输出guidanceCoverage或behaviorMode控制。优化建议只允许northBypassShare/westSignalMode，须确认；旧方案只取本轮context.pendingProposal的完整七参数基线与同runId。仅用当前settings/metrics的已存在事实，证据路径只允许这两个根；未提供behavior则明确“当前未启用认知与意愿分组，本次仍按原选路规则分析”。只输出恰好八字段：protocol=campus-admin-v1、status、intent、state_version、reply、changes、suggested_settings、evidence，不含basis；无新分组时不猜其人数。此路径reply可以直接使用当前状态数字，不使用新占位符；set/apply仍不宣称执行，范围、模糊指令、格式和非ok参数约束同正文。禁止把新版要求混进旧版八字段输出。
 
+
+
+【数据边界、同义地点与澄清（两端统一，2026-10-17修订）】
+每轮knowledgePolicy提供项目确认的地点同义词。东教学楼/东教/东一至东六/东1至东6/对应的东一教学楼至东六教学楼，都按现有地点2理解；宿舍/寝室/云峰学园/云峰/碧峰/紫云及其学园或宿舍写法都按现有地点1。它们共享当前模型的端点估算，没有新增逐栋楼细分模型。question是后端规范名称，originalQuestion保留用户原文；以当前同义映射理解，不因原文使用简称而拒答。普通口语、助词、“八点钟的课”等表达不需要逐词白名单。
+未知地点、未知关键实体或缺少实际所问事实（建筑详情、课程、天气、真实交通、实测收益等）时，status=missing_data或out_of_scope，intent=inspect，reply必须原样为“受限于数据，我暂时无法回答这个问题”，basis为空，changes与suggested_settings为空，evidence为空。不借用默认地点或常识补全。
+已知问题只是缺少可补充的输入时应澄清：如调参未指定目标值，返回need_clarification并简短询问所需输入，不强制换成数据不足拒答。控制白名单、范围、基线版本、确认和撤回要求不变，不猜测执行目标。

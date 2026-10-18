@@ -36,8 +36,11 @@ test('自然语言距离偏好可以覆盖默认省时偏好，同一会话每�
   const h=await setup(t);await h.post(request());
   const short=await h.post(request({question:'哪条路更近？'}));assert.equal(short.data.criterion,'distance');assert.equal(short.data.recommendedRouteId,'main');
   const b=await h.post(request({fixtureId:'B'}));assert.equal(b.data.recommendedRouteId,'main');assert.equal(b.data.routes[0].travelTimeSeconds,160);
-  assert.equal(h.calls[1].conversation_id,'student-conversation');assert.equal(h.calls[1].user,h.calls[0].user);
-  assert.equal(JSON.parse(h.calls[2].query).state.stateVersion,'student-fixture-B-1-2-electric');
+  assert.equal(h.calls.length,0);assert.equal(short.data.provider,'local-routing');
+  await h.post(request({question:'请比较当前行程的耗时'}));
+  await h.post(request({question:'请比较当前行程的耗时',fixtureId:'B'}));
+  assert.equal(h.calls[1].conversation_id,undefined);assert.equal(h.calls[1].user,h.calls[0].user);
+  assert.equal(JSON.parse(h.calls[1].query).state.stateVersion,'student-fixture-B-1-2-electric');
 });
 test('未来数据、同地点和未知行程不触发 Dify 调用',async t=>{
   const h=await setup(t);
@@ -47,7 +50,7 @@ test('未来数据、同地点和未知行程不触发 Dify 调用',async t=>{
   assert.equal(h.calls.length,0);
 });
 test('不能展示不在当前状态中的 AI 路线建议，缺数据回答不带路线卡',async t=>{
-  const h=await setup(t);h.setVariant('wrong-route');const bad=await h.post(request());assert.equal(bad.status,502);assert.equal(bad.data.error,'invalid_student_reply');
+  const h=await setup(t);h.setVariant('wrong-route');const bad=await h.post(request({question:'请比较当前行程的耗时'}));assert.equal(bad.status,502);assert.equal(bad.data.error,'invalid_student_reply');
   h.setVariant('missing');const missing=await h.post(request({question:'去地点9怎么走？'}));assert.equal(missing.data.status,'missing_data');assert.deepEqual(missing.data.routes,[]);
 });
 test('师生页面资源可访问，私有密钥和后端源码不可下载',async t=>{
