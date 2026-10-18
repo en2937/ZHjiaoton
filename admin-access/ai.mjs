@@ -1,3 +1,6 @@
+import {loadProviderConfig,ProviderError} from '../ai-provider/config.mjs';
+import {callDeepSeek} from '../ai-provider/deepseek.mjs';
+import {DATA_LIMIT_REPLY,questionScope,knowledgePolicy,reportsUncertainty,canonicalQuestion,aliasAcknowledgement} from '../qa-policy/knowledge-scope.mjs';
 import {readFile} from 'node:fs/promises';
 import {behaviorFacts,validBehaviorAggregate} from './behavior-facts.mjs';
 import {randomUUID,createHash} from 'node:crypto';
@@ -10,11 +13,19 @@ import {readReply} from '../dify-integration-lab/server.mjs';
 const validatorContext=vm.createContext({});
 vm.runInContext(await readFile(new URL('../admin-ai-design/validate-response.js',import.meta.url),'utf8'),validatorContext);
 export class AiError extends Error{constructor(status,message,code='ai_unavailable'){super(message);Object.assign(this,{status,code});}}
-export async function loadAdminAiConfig(){
+async function loadAdminDifyConfig(){
  let saved={};try{saved=JSON.parse(await readFile(new URL('./private/dify-admin.json',import.meta.url),'utf8'));}catch(error){if(error.code!=='ENOENT')throw new AiError(503,'交通助手暂未就绪，请稍后重试。');}
  return {apiBase:process.env.DIFY_ADMIN_API_BASE||saved.apiBase||'https://dify-api.zju.edu.cn/v1',apiKey:process.env.DIFY_ADMIN_API_KEY||saved.apiKey||'',timeoutMs:45000};
 }
+export async function loadAdminAiConfig(){
+ try{return await loadProviderConfig('admin',loadAdminDifyConfig);}
+ catch(error){if(error instanceof ProviderError)throw new AiError(error.status,error.message,error.code);throw error;}
+}
 export async function callAdminDify(config,payload){
+ if(config.provider==='deepseek'){
+  try{return await readReply(await callDeepSeek({...config,audience:'admin'},payload));}
+  catch(error){if(error instanceof ProviderError)throw new AiError(error.status,error.message,error.code);throw error;}
+ }
  if(!config.apiKey)throw new AiError(503,'交通助手暂未连接，请稍后刷新。','not_configured');
  const base=new URL(config.apiBase);
  const permitted=base.protocol==='https:'&&base.hostname==='dify-api.zju.edu.cn'&&base.pathname.replace(/\/$/,'')==='/v1'||config.allowLoopback&&base.protocol==='http:'&&base.hostname==='127.0.0.1';
@@ -36,7 +47,7 @@ export function adminState(packet,now=Date.now()){
  state.controlPolicy={allowedKeys:SETTING_KEYS.filter(k=>k!=='behaviorMode'&&(k!=='guidanceCoverage'||state.behavior?.enabled)),readOnly:['behaviorMode','认知权重','意愿权重','试用概率','节省门槛','固定种子'],guidanceRequiresEnabledMode:true};return state;
 }
 const validId=value=>typeof value==='string'&&/^[a-zA-Z0-9_-]{8,80}$/.test(value);
-const mentioned={guidanceCoverage:/引导(?:覆盖|触达)|信息(?:覆盖|触达)|\bguidanceCoverage\b/i,demand:/骑行(?:车流|流量|需求)|自行车(?:流|需求)|非机动车(?:流|需求)|\bdemand\b/i,motorDemand:/(?<!非)机动车|汽车|\bmotorDemand\b/i,northDemand:/北侧来车|北侧车流|北边来车|\bnorthDemand\b/i,electric:/电动车|电动占比|\belectric\b/i,outbound:/地点\s*1|1\s*侧|宿舍.*来车|\boutbound\b/i,northBypassShare:/绕行|北侧环岛|分流|避开\s*A|\bnorthBypassShare\b/i,westSignalMode:/配时|自动|固定|红绿灯|信号|\bwestSignalMode\b/i};
+const mentioned={guidanceCoverage:/引导(?:覆盖|触达)|信息(?:覆盖|触达)|\bguidanceCoverage\b/i,demand:/骑行(?:车流|流量|需求)|自行车(?:流|需求)|非机动车(?:流|需求)|\bdemand\b/i,motorDemand:/(?<!非)机动车|汽车|\bmotorDemand\b/i,northDemand:/北侧来车|北侧车流|北边来车|\bnorthDemand\b/i,electric:/电动车|电动占比|\belectric\b/i,outbound:/地点\s*1|1\s*侧|(?:宿舍|云峰(?:学园)?).*来车|\boutbound\b/i,northBypassShare:/绕行|北侧环岛|分流|避开\s*A|\bnorthBypassShare\b/i,westSignalMode:/配时|自动|固定|红绿灯|信号|\bwestSignalMode\b/i};
 export function createAdminAi({getPacket,controlPacket,configProvider=loadAdminAiConfig,model=callAdminDify,now=()=>Date.now(),maxPerMinute=8}={}){
  let active=0;
  function chat(session,id){
@@ -90,8 +101,10 @@ export function createAdminAi({getPacket,controlPacket,configProvider=loadAdminA
    else if(action==='cancel'||action==='chat'&&/^取消(?:刚才|这个|当前|待执行)?的?方案[。！!]?$/u.test(question)){current.proposal=null;result=response('info','方案已取消，当前参数保持不变。');}
    else if(action==='undo'||action==='chat'&&/^(?:撤回|撤销|恢复)上次(?:的)?(?:调整|调参|修改)[。！!]?$/u.test(question)){if(!current.undo)result=response('rejected','当前没有可撤回的调整，或参数已被再次修改。');else result=await apply(current.undo.before,{undo:true});}
    else if(action==='apply'){if(!current.proposal)result=response('rejected','之前的方案已失效，请重新提出优化要求。');else result=await apply(current.proposal.settings);}
+   else if(!questionScope(question,{audience:'admin'}).allowed){result=response('info',DATA_LIMIT_REPLY,{status:'missing_data',proposal:null});}
+   else if(aliasAcknowledgement(question)){result=response('info',aliasAcknowledgement(question));}
    else{
-    const envelope={protocol:'campus-admin-v2',question,state,context:{pendingProposal:current.proposal}};
+    const envelope={protocol:'campus-admin-v2',question:canonicalQuestion(question),originalQuestion:question,state,knowledgePolicy:knowledgePolicy('admin'),context:{pendingProposal:current.proposal}};
     const config=await configProvider(),deadline=performance.now()+Math.min(config.timeoutMs||45000,45000);
     const payload=query=>({inputs:{},query:JSON.stringify(query),response_mode:'streaming',user:current.user,auto_generate_name:false,...(current.conversationId?{conversation_id:current.conversationId}:{})});
     let reply=await model({...config,timeoutMs:Math.max(1,Math.floor(deadline-performance.now()))},payload(envelope));
@@ -114,8 +127,9 @@ export function createAdminAi({getPacket,controlPacket,configProvider=loadAdminA
     const fresh=adminState(await getPacket(),now());
     if(fresh.runId!==state.runId||fresh.settingsRevision!==state.settingsRevision||!sameSettings(fresh.settings,state.settings))throw new AiError(409,'参数或场景已改变，请基于当前状态重新提出要求。','state_conflict');
     current.conversationId=reply.conversationId||'';
-    if(decision.status!=='ok')result=response('rejected',decision.intent==='apply_proposal'?'之前的方案已失效或缺失，请重新提出方案。':[decision.basis,decision.reply].filter(Boolean).join(' '));
-    else if(decision.intent==='set'&&Object.keys(decision.changes).some(key=>!mentioned[key]?.test(question)))result=response('rejected','这次指令包含未明确要求的参数，请说明具体要调整哪项。');
+    if(['missing_data','out_of_scope'].includes(decision.status)&&decision.intent!=='apply_proposal'||reportsUncertainty(decision.reply+' '+decision.basis)&&!(decision.status==='need_clarification'&&/请(?:说明|提供|告诉|明确|指定|选择|补充)/.test(decision.reply)))result=response('info',DATA_LIMIT_REPLY,{status:'missing_data',proposal:null});
+    else if(decision.status!=='ok')result=response('rejected',decision.intent==='apply_proposal'?'之前的方案已失效或缺失，请重新提出方案。':[decision.basis,decision.reply].filter(Boolean).join(' '));
+    else if(decision.intent==='set'&&Object.keys(decision.changes).some(key=>!mentioned[key]?.test(canonicalQuestion(question))))result=response('rejected','这次指令包含未明确要求的参数，请说明具体要调整哪项。');
     else if(['set','apply_proposal'].includes(decision.intent))result=await apply(decision.changes);
     else if(decision.intent==='suggest'){
      if(Object.keys(decision.suggested_settings).some(key=>!['northBypassShare','westSignalMode','guidanceCoverage'].includes(key))){result=response('rejected','优化方案可比较配时、北侧绕行策略和引导覆盖；更换车流场景请明确给出目标参数。');}

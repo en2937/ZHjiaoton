@@ -173,6 +173,7 @@ export const uiMotion = createUiMotion(loadUiGsap());
 // END GENERATED UI MOTION
 const $=id=>document.getElementById(id);
 let mode='electric',preference='time',busy=false,lastReply=null,liveReading=false;
+let activeRequest=null,requestGeneration=0,pollTimer=null,pollController=null,localRoutingEnabled=true;
 const moveModeSelection=uiMotion.choice(document.querySelector('.mode-options'));
 const movePreferenceSelection=uiMotion.choice(document.querySelector('.preference-options'));
 const newSessionId=()=>typeof crypto.randomUUID==='function'?crypto.randomUUID():[...crypto.getRandomValues(new Uint8Array(16))].map(value=>value.toString(16).padStart(2,'0')).join('');
@@ -190,20 +191,40 @@ function setStatus(message,error=false,key='query'){
   $('status').textContent=notice?.message||'';$('status').hidden=!notice;$('status').classList.toggle('error',Boolean(notice?.error));
 }
 function publicError(code){
-  const messages={bad_question:'请输入 1–1000 字的问题。',bad_session:'请刷新页面后重试。',bad_trip:'请先选择行程和出行方式。',unknown_trip:'这个行程暂时没有路线数据。',session_busy:'上一条问题还在处理中，请稍等。',session_limit:'服务繁忙，请稍后再试。',sandbox_unavailable:'交通数据暂不可用，请稍后重试。',dify_http_429:'服务繁忙，请稍后再试。',dify_timeout:'回答超时，请重新发送。',invalid_student_reply:'暂时未能生成路线建议，请重试。'};
+  const forecastErrors={forecast_busy:'后台正在推演另一项出发建议，请稍后再试。',forecast_timeout:'后台推演超时，请稍后重试。',forecast_failed:'后台推演暂未完成，请稍后重试。',forecast_stale:'交通方案已更新，请重新查询出发时间。'};
+  if(forecastErrors[code])return forecastErrors[code];
+  const requestErrors={rate_limited:'提问过于频繁，请稍后再试。',gateway_busy:'访问人数较多，请稍后再试。',invalid_json:'问题格式有误，请刷新页面后重试。',body_too_large:'问题内容过长，请缩短后重试。'};
+  if(requestErrors[code])return requestErrors[code];
+  const messages={bad_question:'请输入 1–1000 字的问题。',bad_session:'请刷新页面后重试。',bad_trip:'请先选择行程和出行方式。',unknown_trip:'这个行程暂时没有路线数据。',session_busy:'上一条问题还在处理中，请稍等。',session_limit:'服务繁忙，请稍后再试。',session_rate_limit:'提问过于频繁，请稍后再试。',sandbox_unavailable:'交通数据暂不可用，请稍后重试。',dify_http_429:'AI 服务繁忙，请稍后再试。',dify_timeout:'AI 回答超时，请手动重试。',deepseek_http_429:'AI 服务繁忙，请稍后再试。',deepseek_timeout:'AI 回答超时，请手动重试。',invalid_student_reply:'AI 暂未完成回答，请手动重试。',ai_busy:'AI 服务繁忙，暂未完成回答。',ai_queue_timeout:'AI 等待超时，暂未完成回答。',ai_timeout:'AI 回答超时，暂未完成回答。',ai_cooldown:'AI 暂时繁忙，请稍后再试。',state_changed:'交通方案已更新，请重新查询。',request_timeout:'请求超时，AI 暂未完成回答。',not_configured:'AI 暂未配置，可查看本地路线。'};
   return messages[code]||'出行服务暂不可用，请稍后重试。';
 }
-function setBusy(value){busy=value;document.querySelectorAll('button,select,textarea').forEach(e=>e.disabled=value||e.dataset.available==='false');$('question-form').setAttribute('aria-busy',String(value));}
+function setBusy(value){busy=value;document.querySelectorAll('button,select,textarea').forEach(e=>e.disabled=(value&&e!==$('reset-chat')&&e!==$('cancel-question'))||e.dataset.available==='false');$('cancel-question').hidden=!value;$('question-form').setAttribute('aria-busy',String(value));}
 function scrollConversation(){const node=$('conversation');node.scrollTop=node.scrollHeight;}
-function reset(){sessionId=newSessionId();lastReply=null;$('conversation').replaceChildren(welcomeTemplate.cloneNode(true));$('question').value='';$('question').style.height='';bindSuggestions();setStatus('',false,'update');setStatus('');}
+function finishRequest(request){clearTimeout(request.deadlineTimer);clearTimeout(request.statusTimer);clearTimeout(request.forecastTimer);clearTimeout(request.pollDelayTimer);if(activeRequest===request){activeRequest=null;setBusy(false);}}
+function cancelQuestion(){const request=activeRequest;if(!request)return;requestGeneration++;request.controller.abort();finishRequest(request);request.pending.replaceWith(element('p','cancelled-message','已取消本次提问。'));$('question').value=request.question;setStatus('已取消，可修改问题后重新发送。');$('question').focus();}
+function reset(){cancelQuestion();sessionId=newSessionId();lastReply=null;$('conversation').replaceChildren(welcomeTemplate.cloneNode(true));$('question').value='';$('question').style.height='';bindSuggestions();setStatus('',false,'update');setStatus('');}
 const welcomeTemplate=$('welcome').cloneNode(true);
 function bindSuggestions(){document.querySelectorAll('[data-question]').forEach(b=>b.onclick=()=>ask(b.dataset.question));}
 function metric(label,icon,formatted){const div=element('div'),caption=element('div','metric-label');caption.append(icons(icon),element('span','',label));const value=element('div','metric-value'+(formatted.value.length>4?' long':''),formatted.value);if(formatted.unit)value.append(element('span','metric-unit',formatted.unit));div.append(caption,value);return div;}
 function renderReply(data,chosenTrip){
+  chosenTrip=data.trip??chosenTrip;
   const article=element('article','assistant-message'),byline=element('div','reply-byline');
   const placeName=id=>[...$('origin').options].find(p=>p.value===id)?.textContent||id;
-  byline.append(icons('spark'),element('span','',data.provider==='school-dify'?'AI 出行建议':'行程提示'),element('span','trip-context',placeName(chosenTrip.origin)+' → '+placeName(chosenTrip.destination)+' · '+({electric:'电动车',bicycle:'自行车'}[chosenTrip.mode])));
+  byline.append(icons('spark'),element('span','',data.provider==='sandbox-forecast'?'出发建议':['school-dify','deepseek'].includes(data.provider)?'AI 出行建议':data.provider==='local-routing'?'本地路线计算':'行程提示'),element('span','trip-context',placeName(chosenTrip.origin)+' → '+placeName(chosenTrip.destination)+' · '+({electric:'电动车',bicycle:'自行车'}[chosenTrip.mode])));
   article.append(byline,element('p','recommendation',data.message));
+  if(data.kind==='departure_forecast'){
+    if(data.status==='ok'&&data.forecast?.recommendation){
+      const f=data.forecast,r=f.recommendation,card=element('section','forecast-card');card.append(element('h4','',f.classTime+' 上课'+(f.objective?.label?' · '+f.objective.label:'')));
+      const row=element('div','forecast-metrics');row.append(metric('建议出发','clock',{value:r.departureTime}),metric('预计到达','clock',{value:r.arrivalTime}),metric('预计用时','route',timeMetric(r.travelTimeSeconds)));card.append(row,element('p','forecast-route',r.name+' · '+distanceMetric(r.distanceMeters).value+distanceMetric(r.distanceMeters).unit+' · 含入口等待'));
+      article.append(card,element('p','forecast-note','已预留5分钟；停车和进楼时间未单独计算。'));
+      if(f.objective?.id==='avoid-congestion'){
+        const c=f.comparison,notice='预计等待与慢行 '+timeDifference(r.delaySeconds)+'（含红灯）。';
+        article.append(element('p','forecast-note',notice+(c?.delayReductionSeconds>0?'比最晚可行方案减少约'+timeDifference(c.delayReductionSeconds)+(c.earlierDepartureMinutes>0?'，提前'+c.earlierDepartureMinutes+'分钟出发。':'，可保持同一出发时刻。'):'本轮候选中，较晚出发的等待与慢行也已接近最低。')));
+      }
+      const details=element('details','forecast-assumptions'),list=element('ul');details.append(element('summary','','计算依据'));for(const assumption of f.assumptions)list.append(element('li','',assumption));details.append(list);article.append(details);
+    }
+    return article;
+  }
   if(data.status==='ok'){
     const cards=element('div','route-cards');
     const displayRoutes=[...data.routes].sort((a,b)=>Number(b.id===data.recommendedRouteId)-Number(a.id===data.recommendedRouteId));
@@ -222,13 +243,37 @@ function renderReply(data,chosenTrip){
 async function ask(value){
   const question=String(value||'').trim();if(busy)return;if(!question){setStatus('写下你想问的问题。');$('question').focus();return;}
   const chosenTrip=trip();$('welcome')?.remove();const user=element('div','user-message');user.append(element('p','',question));$('conversation').append(user);uiMotion.reveal(user,{y:4,duration:.18});
-  const pending=element('div','pending');pending.setAttribute('aria-label','AI 正在比较路线');for(let i=0;i<3;i++)pending.append(element('i'));$('conversation').append(pending);scrollConversation();setBusy(true);setStatus('正在比较路线…');$('question').value='';$('question').style.height='';
+  const forecasting=/(几点|何时|什么时候|提前多久|出发时间)/.test(question)||(/避堵|避开拥堵|错峰/.test(question)&&/上课|早八/.test(question));
+  const pending=element('div','pending');pending.setAttribute('aria-label',forecasting?'正在后台推演出发时间':'正在处理问题');for(let i=0;i<3;i++)pending.append(element('i'));$('conversation').append(pending);scrollConversation();setBusy(true);setStatus(forecasting?'正在后台推演出发时间…':'正在比较路线…');$('question').value='';$('question').style.height='';
+  const request={generation:++requestGeneration,controller:new AbortController(),question,pending,started:Date.now(),timedOut:false,forecasting};activeRequest=request;
+  const current=()=>activeRequest===request&&requestGeneration===request.generation;
+  const updateWaiting=()=>{if(!current())return;const remaining=Math.max(0,Math.ceil((12000-(Date.now()-request.started))/1000));setStatus(request.forecasting?'正在后台推演出发时间，可随时取消。':remaining?'仍在处理，最多再等待 '+remaining+' 秒，可随时取消。':'等待已到上限，正在结束本次请求…');request.statusTimer=setTimeout(updateWaiting,1000);};
+  request.statusTimer=setTimeout(updateWaiting,3000);
+  // Race the complete JSON exchange as well as aborting fetch. This also bounds
+  // waiting if a transport or body reader fails to observe AbortSignal promptly.
+  const aborted=new Promise((_,reject)=>request.controller.signal.addEventListener('abort',()=>reject(Object.assign(new Error('aborted'),{publicMessage:request.timedOut?publicError('request_timeout'):null})),{once:true}));
+  const armDeadline=()=>{clearTimeout(request.deadlineTimer);request.deadlineTimer=setTimeout(()=>{request.timedOut=true;request.controller.abort();},13000);};
+  armDeadline();
   try {
-    const response=await fetch('/api/student/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question,trip:chosenTrip,preference,sessionId})});
-    const data=await response.json();if(!response.ok)throw Object.assign(new Error(),{publicMessage:publicError(data.error)});
-    lastReply=data;const reply=renderReply(data,chosenTrip);pending.replaceWith(reply);uiMotion.reply(reply);setStatus('',false,'update');setStatus('',false,'service');setStatus('');
-  }catch(e){const message=e.publicMessage||'暂时无法获取建议，请重新发送。';pending.replaceWith(element('p','error-message',message));$('question').value=question;setStatus(message,true);}
-  finally{setBusy(false);scrollConversation();void refreshLive();}
+    let data,jobId;
+    do{
+      const exchange=await Promise.race([aborted,(async()=>{const response=await fetch('/api/student/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question,trip:chosenTrip,preference,sessionId,forecastAsync:true,...(jobId?{forecastJobId:jobId}:{})}),signal:request.controller.signal});return {response,data:await response.json()};})()]);
+      const response=exchange.response;data=exchange.data;
+      if(!current())return;
+      if(!response.ok){const retry=Number(response.headers.get('Retry-After')),retryHint=Number.isFinite(retry)&&retry>0?' 请在 '+Math.ceil(retry)+' 秒后手动重试。':'';throw Object.assign(new Error(),{publicMessage:publicError(data.error??(response.status===429?'rate_limited':undefined))+retryHint,code:data.error});}
+      if(response.status!==202)break;
+      jobId=data.jobId;request.forecasting=true;clearTimeout(request.deadlineTimer);
+      if(!request.forecastTimer)request.forecastTimer=setTimeout(()=>{request.timedOut=true;request.controller.abort();},Math.max(0,190000-(Date.now()-request.started)));
+      await Promise.race([aborted,new Promise(resolve=>{request.pollDelayTimer=setTimeout(resolve,Math.max(10000,Math.min(15000,data.retryAfterMs??10000)));})]);
+      if(!current())return;
+      armDeadline();
+    }while(true);
+    if(!current())return;
+    lastReply=data.runId&&data.settings?data:null;const reply=renderReply(data,chosenTrip);pending.replaceWith(reply);uiMotion.reply(reply);setStatus('',false,'update');setStatus('',false,'service');setStatus('');
+  }catch(e){if(!current())return;const message=e.publicMessage||'暂时无法获取建议，请重新发送。',failure=element('div','error-message');failure.append(element('p','',message));
+    if(localRoutingEnabled&&!request.forecasting&&!String(e.code||'').startsWith('forecast_')&&!['bad_question','bad_session','bad_trip','unknown_trip','state_changed','sandbox_unavailable','session_busy','session_limit','session_rate_limit','rate_limited','gateway_busy','invalid_json','body_too_large'].includes(e.code)){failure.append(element('p','','AI 暂未完成回答。你可以单独查看当前偏好的本地路线。'));const fallback=element('button','local-fallback','按当前偏好查看本地路线');fallback.type='button';fallback.onclick=()=>ask('按当前偏好推荐路线');failure.append(fallback);}
+    pending.replaceWith(failure);$('question').value=question;setStatus(message,true);
+  }finally{if(current()){finishRequest(request);scrollConversation();void refreshLive();}}
 }
 
 document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{mode=b.dataset.mode;document.querySelectorAll('[data-mode]').forEach(e=>e.setAttribute('aria-pressed',String(e===b)));moveModeSelection();void refreshLive();});
@@ -236,13 +281,15 @@ document.querySelectorAll('[data-preference]').forEach(b=>b.onclick=()=>{prefere
 $('swap-places').onclick=()=>{const from=$('origin').value;$('origin').value=$('destination').value;$('destination').value=from;uiMotion.rotate($('swap-places').querySelector('svg'));uiMotion.reveal(document.querySelectorAll('.place-selects select'),{y:2,duration:.16});setStatus('');void refreshLive();};
 $('origin').onchange=$('destination').onchange=()=>void refreshLive();
 $('reset-chat').onclick=reset;
+$('cancel-question').onclick=cancelQuestion;
 $('question-form').onsubmit=e=>{e.preventDefault();ask($('question').value);};
 $('question').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();ask($('question').value);}};
 $('question').oninput=()=>{$('question').style.height='auto';$('question').style.height=Math.min(100,$('question').scrollHeight)+'px';};
 bindSuggestions();
 async function refreshLive(){
- if(liveReading)return;liveReading=true;const chosen=trip();
- try{const response=await fetch('/api/student/state?'+new URLSearchParams(chosen),{signal:AbortSignal.timeout(6000)});const data=await response.json();if(!response.ok)throw new Error();
+ if(document.hidden||liveReading)return;clearTimeout(pollTimer);liveReading=true;const chosen=trip(),controller=new AbortController();pollController=controller;const timeout=setTimeout(()=>controller.abort(),6000);
+ try{const response=await fetch('/api/student/state?'+new URLSearchParams(chosen),{signal:controller.signal});const data=await response.json();if(!response.ok)throw new Error();
+  if(controller.signal.aborted||document.hidden||pollController!==controller)return;
   if(JSON.stringify(chosen)!==JSON.stringify(trip()))return;
   $('studentSimulationClock').textContent=data.clock?'沙盘 '+data.clock.label+(data.clock.classTime?' · 上课 '+data.clock.classTime:''):'';
   $('studentSimulationClock').hidden=data.departureScenario?.mode!=='survey';
@@ -251,12 +298,15 @@ async function refreshLive(){
   setStatus('',false,'traffic');
   const changed=lastReply&&(lastReply.runId!==data.runId||JSON.stringify(lastReply.settings)!==JSON.stringify(data.settings));
   setStatus(changed?'交通方案已更新，请重新查询。':'',false,'update');
- }catch{setStatus('交通数据暂不可用，正在重试…',true,'traffic');}
- finally{liveReading=false;}
+ }catch{if(!document.hidden&&pollController===controller)setStatus('交通数据暂不可用，正在重试…',true,'traffic');}
+ finally{clearTimeout(timeout);if(pollController===controller){pollController=null;liveReading=false;schedulePoll();}}
 }
+function schedulePoll(){clearTimeout(pollTimer);if(!document.hidden)pollTimer=setTimeout(()=>void refreshLive(),5000+Math.floor(Math.random()*1000));}
+document.addEventListener('visibilitychange',()=>{clearTimeout(pollTimer);if(document.hidden){pollController?.abort();pollController=null;liveReading=false;}else void refreshLive();});
 try{const r=await fetch('/api/student/options');if(!r.ok)throw new Error();const options=await r.json();
+ localRoutingEnabled=options.localRoutingEnabled!==false;
  for(const id of ['origin','destination'])for(const p of options.places){const option=[...$(id).options].find(o=>o.value===p.id);if(option)option.textContent=p.name;}
  for(const entry of options.modes){const button=document.querySelector('[data-mode="'+entry.id+'"]');if(button){button.dataset.available=String(entry.available!==false);button.disabled=entry.available===false;}}
- if(!options.configured)setStatus('出行服务暂不可用，请稍后重试。',true,'service');
+ if(!options.configured)setStatus(options.localRoutingEnabled?'AI 暂不可用，常见路线问题仍可本地计算。'+(options.forecastAvailable?'也可查询上课出发时间。':''):options.forecastAvailable?'路线AI暂不可用，仍可查询上课出发时间。':'AI 暂不可用，请稍后重试。',false,'service');
 }catch{setStatus('出行服务暂不可用，请稍后重试。',true,'service');}
-await refreshLive();setInterval(refreshLive,3000);
+await refreshLive();

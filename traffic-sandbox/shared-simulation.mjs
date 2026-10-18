@@ -4,13 +4,16 @@ import {Simulation,createOvertakingDemo,departureConfig,observationOffset} from 
 import {sameSettings,validSettings} from './control-settings.mjs';
 const routingMode=config=>config?.mode==='survey'?'grouped':'original';
 const scenarioSettings=(settings,config)=>({...settings,behaviorMode:routingMode(config)});
+const HOUR_SECONDS=3600,LOOP_EPSILON=1e-7;
 // One local service owns the simulation. Browser tabs are views of this state.
 export class SharedSimulation {
- constructor({running=true,speed=4,seed=20261012,settings={},departureScenario={},initialPacket,preserveRunId=false}={}) {
+ constructor({running=true,speed=4,seed=20261012,settings={},departureScenario={},initialPacket,preserveRunId=false,loopDefaultWindow=initialPacket?.autoReplay?.configured??false}={}) {
   const config=departureConfig(departureScenario);
   this.sim=new Simulation({seed,settings:scenarioSettings(settings,config),departureScenario:config});this.initialSeed=initialPacket?.initialSeed??seed;
   this.instanceId=randomUUID();this.runId=randomUUID();this.revision=0;this.settingsRevision=Number.isSafeInteger(initialPacket?.settingsRevision)?initialPacket.settingsRevision:0;
   this.running=running;this.speed=speed;this.updatedAt=new Date().toISOString();
+  this.loopDefaultWindow=loopDefaultWindow;
+  this.loopCount=Number.isSafeInteger(initialPacket?.autoReplay?.cycles)&&initialPacket.autoReplay.cycles>=0?initialPacket.autoReplay.cycles:0;
   if(initialPacket?.simulation){
    this.sim=Object.assign(Object.create(Simulation.prototype),structuredClone(initialPacket.simulation));
    // Only upgrade legacy snapshots. Reinitializing current snapshots changes routing history.
@@ -20,9 +23,30 @@ export class SharedSimulation {
    if(this.sim.settings.behaviorMode!==expectedMode){this.sim.setSettings({behaviorMode:expectedMode});this.settingsRevision++;}
    this.running=initialPacket.running;this.speed=initialPacket.speed;if(preserveRunId&&typeof initialPacket.runId==='string')this.runId=initialPacket.runId;this.changed();
   }
+  // A saved default demonstration may already be past 08:00. Do not replay its
+  // old backlog or silently replace an administrator's different scenario.
+  if(this.defaultWindowActive()&&this.sim.time>=HOUR_SECONDS-LOOP_EPSILON)this.restartDefaultWindow();
  }
  changed(){this.revision++;this.updatedAt=new Date().toISOString();}
- advance(seconds){if(this.running&&seconds>0){this.sim.step(Math.min(seconds,.25)*this.speed);this.changed();}}
+ defaultWindowActive(){
+  const config=this.sim.departureScenario;
+  return this.loopDefaultWindow&&!this.sim.demo&&config?.mode==='survey'&&config.classTime==='08:00'&&observationOffset(config)===0;
+ }
+ restartDefaultWindow(){
+  this.sim=this.makeScenario({...this.sim.settings},this.sim.departureScenario);
+  this.runId=randomUUID();this.settingsRevision++;this.loopCount++;this.changed();
+ }
+ advance(seconds){
+  if(!this.running||!(seconds>0))return;
+  const dt=Math.min(seconds,.25)*this.speed;
+  if(this.defaultWindowActive()&&this.sim.time+dt>=HOUR_SECONDS-LOOP_EPSILON){
+   const remaining=Math.max(0,HOUR_SECONDS-this.sim.time);
+   if(remaining>LOOP_EPSILON)this.sim.step(Math.min(remaining,dt));
+   this.restartDefaultWindow();
+   const overflow=Math.max(0,dt-remaining);if(overflow>LOOP_EPSILON)this.sim.step(overflow);
+  }else this.sim.step(dt);
+  this.changed();
+ }
  makeScenario(settings,config){const sim=new Simulation({seed:this.initialSeed,settings:scenarioSettings(settings,config),departureScenario:config});if(sim.departureScenario.mode==='survey')sim.step(observationOffset(sim.departureScenario));return sim;}
  async controlAsync(command={}){
   if(command.expected)return this.control(command);
@@ -43,7 +67,7 @@ export class SharedSimulation {
  }
  packet(){return {schemaVersion:1,source:'synthetic-simulation',instanceId:this.instanceId,runId:this.runId,
   behavior:{...this.sim.behaviorState(),modeSource:'departureScenario',runId:this.runId,settingsRevision:this.settingsRevision,stateVersion:this.runId+':'+this.revision,updatedAt:this.updatedAt},initialSeed:this.initialSeed,clock:this.sim.clockState(),departureScenario:this.sim.departureState(),stateVersion:this.runId+':'+this.revision,revision:this.revision,settingsRevision:this.settingsRevision,updatedAt:this.updatedAt,
-  running:this.running,speed:this.speed,simulation:this.sim};}
+  running:this.running,speed:this.speed,...(this.loopDefaultWindow?{autoReplay:{configured:true,enabled:this.defaultWindowActive(),startTime:'07:00',endTime:'08:00',cycles:this.loopCount}}:{}),simulation:this.sim};}
  control(command={}) {
   if(!['settings','play','speed','reset','preset','demo','departureScenario'].includes(command.action))throw new Error('未知沙盘操作');
   if(command.expected){
