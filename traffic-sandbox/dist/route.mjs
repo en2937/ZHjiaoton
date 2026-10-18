@@ -11,8 +11,8 @@ export const POINTS = [
   [1346,1026],[1367,1104],[1383,1182],[1396,1261]
 ];
 export const LABELS = [
-  {key:'start', title:'出发点 1', subtitle:'宿舍区附近', x:246,y:262},
-  {key:'end', title:'出发点 2', subtitle:'教学区附近', x:1396,y:1261}
+  {key:'start', title:'出发点 1', subtitle:'云峰学园', x:246,y:262},
+  {key:'end', title:'出发点 2', subtitle:'东教学楼', x:1396,y:1261}
 ];
 export const JUNCTIONS = [
   {id:'west',name:'西侧路口',pointIndex:9,offset:0},

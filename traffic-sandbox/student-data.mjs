@@ -1,6 +1,6 @@
 import {Simulation,roadGeometry,WAIT_SPEED} from './dist/engine.mjs';
 import {ROUTES,APPROACHES} from './dist/route.mjs';
-export const places=[{id:'1',name:'宿舍区附近（1）'},{id:'2',name:'教学区附近（2）'}];
+export const places=[{id:'1',name:'云峰学园（1）'},{id:'2',name:'东教学楼（2）'}];
 export const modes=[{id:'electric',name:'电动车',available:true},{id:'bicycle',name:'自行车',available:true},
  {id:'walking',name:'步行',available:false,reason:'沙盘尚未建立步行模型'}];
 const sourceRoutes={1:[['main','主路','1-south'],['roundabout','环岛','1-ring'],['roundabout-north','北侧环岛线','1-ring-north']],

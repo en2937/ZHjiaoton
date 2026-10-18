@@ -1,3 +1,4 @@
+import {knowledgePolicy,canonicalQuestion} from '../qa-policy/knowledge-scope.mjs';
 // All route values below are invented interface samples, not measured campus
 // distances or output from traffic-sandbox. Replace this adapter after handoff.
 export const studentPlaces = [{id:'1',name:'地点 1'},{id:'2',name:'地点 2'}];
@@ -28,7 +29,7 @@ export function studentEnvelope(question,state,preference) {
   const compact={schemaVersion:state.schemaVersion,stateVersion:state.stateVersion,runId:state.runId,
     source:state.source,origin:state.origin,destination:state.destination,mode:state.mode,
     routes:state.routes.map(({id,name,travelTimeSeconds,distanceMeters})=>({id,name,travelTimeSeconds,distanceMeters})),limitations:state.limitations};
-  return JSON.stringify({protocol:'campus-student-v1',question,state:compact,
+  return JSON.stringify({protocol:'campus-student-v1',question:canonicalQuestion(question),originalQuestion:question,state:compact,knowledgePolicy:knowledgePolicy('student'),
     preference,outputFormat:{status:'ok | missing_data | out_of_scope',criterion:'time | distance',recommended_route_id:state.routes.map(r=>r.id).join(' | ')+' | null'},
     instruction:'师生端只要路线选择，不要长解释。只返回所约定的JSON；时间和距离由网页读取本轮state显示。问题中的明确时间/距离偏好优先于preference。未提供目的地或未来数据时不能借用其他线路。'});
 }

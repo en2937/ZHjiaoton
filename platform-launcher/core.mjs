@@ -38,6 +38,13 @@ export function assertSharedEntry(expected, actual, {student = false} = {}) {
       ['mode', 'classTime', 'totalPeople', 'seed'].some(key => received.config[key] !== scene.config[key]))
     fail('出发场景不一致');
 }
+export function isAutomaticReplay(previous, current) {
+  const a = previous?.autoReplay, b = current?.autoReplay;
+  return Boolean(previous?.instanceId && previous.instanceId === current?.instanceId &&
+    previous.runId !== current.runId && a?.enabled && b?.enabled &&
+    Number.isSafeInteger(a.cycles) && Number.isSafeInteger(b.cycles) && b.cycles > a.cycles &&
+    a.startTime === '07:00' && b.startTime === '07:00' && a.endTime === '08:00' && b.endTime === '08:00');
+}
 export async function requestJson(url, {ca, timeoutMs = 3500} = {}) {
   return new Promise((resolve, reject) => {
     const target = new URL(url);
@@ -192,16 +199,28 @@ export async function launchPlatform({root = projectRoot, python, log = console.
     firewallReady = result.ready;
     if (!firewallReady) warnings.push(result.message || '校园网防火墙尚未放行，请再次运行一键启动并完成 Windows 管理员授权。');
   }
-  const finalPacket = await ready('http://127.0.0.1:4173/api/simulation',packet=>Boolean(packet.simulation));
-  if (initialPacket && (initialPacket.runId!==finalPacket.runId || initialPacket.instanceId!==finalPacket.instanceId))
-    throw new Error('启动期间检测到沙盘由其它操作重新启动或重置；请等待另一聊天完成部署后再启动。本启动器未停止沙盘。');
+  let finalPacket = await ready('http://127.0.0.1:4173/api/simulation',packet=>Boolean(packet.simulation));
   log('核验校内沙盘、师生端与最新出发场景的共享连接…');
-  const [viewerState, studentState] = await Promise.all([
-    get('http://' + host + ':4180/api/simulation'),
-    get('http://' + host + ':4180/api/student/state')
-  ]);
-  assertSharedEntry(finalPacket, viewerState);
-  assertSharedEntry(finalPacket, studentState, {student: true});
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (initialPacket && (initialPacket.runId!==finalPacket.runId || initialPacket.instanceId!==finalPacket.instanceId) && !isAutomaticReplay(initialPacket, finalPacket))
+      throw new Error('启动期间检测到沙盘由其它操作重新启动或重置；请等待另一聊天完成部署后再启动。本启动器未停止沙盘。');
+    const [viewerState, studentState] = await Promise.all([
+      get('http://' + host + ':4180/api/simulation'),
+      get('http://' + host + ':4180/api/student/state')
+    ]);
+    try {
+      assertSharedEntry(finalPacket, viewerState);
+      assertSharedEntry(finalPacket, studentState, {student: true});
+      break;
+    } catch (error) {
+      if (attempt) throw error;
+      const latest = await ready('http://127.0.0.1:4173/api/simulation',packet=>Boolean(packet.simulation));
+      if (latest.instanceId !== finalPacket.instanceId || latest.runId !== finalPacket.runId && !isAutomaticReplay(finalPacket, latest)) throw error;
+      // Student snapshots may retain the previous cycle for at most 500 ms.
+      await sleep(550);
+      finalPacket = await ready('http://127.0.0.1:4173/api/simulation',packet=>Boolean(packet.simulation));
+    }
+  }
   const scene = {mode: finalPacket.departureScenario.mode,
     label: finalPacket.departureScenario.mode === 'survey' ? '问卷分批出发' : '固定需求',
     clock: finalPacket.clock.label, classTime: finalPacket.clock.classTime,

@@ -82,8 +82,8 @@ test('无首包、流式挂起均超时结束，取得task_id后尽力停止',as
 
 test('429进入冷却，快答继续可用且不自动重试',async t=>{
   const h=await setup(t,{behavior:'429'});
-  const first=await h.post({question:'请分析我的行程'});assert.equal(first.data.error,'dify_http_429');assert(first.retry);
-  const second=await h.post({question:'再分析当前行程'});assert.equal(second.data.error,'ai_cooldown');assert.equal(h.calls.length,1);
+  const first=await h.post({question:'请分析当前路线的排队情况'});assert.equal(first.data.error,'dify_http_429');assert(first.retry);
+  const second=await h.post({question:'再比较当前路线的排队情况'});assert.equal(second.data.error,'ai_cooldown');assert.equal(h.calls.length,1);
   assert.equal((await h.post()).data.provider,'local-routing');
 });
 

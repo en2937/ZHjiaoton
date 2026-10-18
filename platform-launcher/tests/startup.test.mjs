@@ -4,7 +4,7 @@ import http from 'node:http';
 import path from 'node:path';
 import os from 'node:os';
 import {mkdtemp, mkdir, writeFile, readFile, rm} from 'node:fs/promises';
-import {launchPlatform, selectCampusAddress, decideService, requestJson} from '../core.mjs';
+import {launchPlatform, selectCampusAddress, decideService, requestJson, isAutomaticReplay} from '../core.mjs';
 
 test('IP changes prefer the current route and ignore stale saved addresses', () => {
   assert.equal(selectCampusAddress(['10.194.56.155'],{requested:'10.196.106.35',previous:'10.196.106.35'}),'10.194.56.155');
@@ -78,6 +78,44 @@ test('repeated startup reuses all services and preserves the running simulation'
   const addressFile=await readFile(path.join(options.root,'平台访问地址.txt'),'utf8');
   assert.match(addressFile,/10\.194\.56\.155:4180\/student\//);
   assert.equal(JSON.parse(await readFile(path.join(options.root,'platform-launcher','last-start.json'),'utf8')).firewallReady,true);
+});
+
+test('automatic replay is distinct from a manual reset or a service restart',()=>{
+ const before={instanceId:'same',runId:'old',autoReplay:{enabled:true,cycles:0,startTime:'07:00',endTime:'08:00'}};
+ const after={...before,runId:'new',autoReplay:{...before.autoReplay,cycles:1}};
+ assert.equal(isAutomaticReplay(before,after),true);
+ for(const packet of [{...after,instanceId:'restarted'},{...after,autoReplay:{...after.autoReplay,cycles:0}},{...after,autoReplay:{...after.autoReplay,enabled:false}},{...after,autoReplay:undefined}])assert.equal(isAutomaticReplay(before,packet),false);
+});
+
+test('crossing 08:00 during startup rereads consistent shared entries without restarting services',async t=>{
+ const {state,options}=await fixture(t),get=options.get;
+ state.packet.departureScenario={mode:'survey',config:{mode:'survey',classTime:'08:00',totalPeople:360,seed:20261014}};
+ state.packet.clock={startSeconds:25200,seconds:28799,label:'07:59:59',classTime:'08:00'};
+ state.packet.autoReplay={configured:true,enabled:true,cycles:0,startTime:'07:00',endTime:'08:00'};
+ let crossed=false;
+ options.get=async(url,extra)=>{
+  const target=new URL(url);
+  if(!crossed&&target.port==='4180'&&target.pathname==='/api/simulation'){
+   crossed=true;state.packet.runId='next-loop';state.packet.autoReplay.cycles++;
+   state.packet.clock={...state.packet.clock,seconds:25200,label:'07:00:00'};
+  }
+  return get(url,extra);
+ };
+ const result=await launchPlatform(options);assert.equal(result.runId,'next-loop');assert.equal(result.sharedStateVerified,true);
+ assert.equal(state.calls.filter(item=>item.action==='start'||item.action==='StopEntry').length,0);
+});
+
+test('one stale student cache frame after automatic replay is retried before reporting a mismatch',async t=>{
+ const {state,options}=await fixture(t),get=options.get;let expired=false,waits=0;
+ state.packet.autoReplay={configured:true,enabled:true,cycles:1,startTime:'07:00',endTime:'08:00'};
+ options.sleep=async ms=>{assert.equal(ms,550);waits++;expired=true;};
+ options.get=async(url,extra)=>{
+  const packet=await get(url,extra),target=new URL(url);
+  if(!expired&&target.port==='4180'&&target.pathname==='/api/student/state')packet.runId='previous-loop';
+  return packet;
+ };
+ const result=await launchPlatform(options);assert.equal(result.sharedStateVerified,true);assert.equal(waits,1);
+ assert.equal(state.calls.filter(item=>item.action==='start'||item.action==='StopEntry').length,0);
 });
 
 test('cold startup starts missing dependencies in order and reports initial-scene recovery limits',async t=>{

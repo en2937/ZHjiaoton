@@ -2,7 +2,8 @@ import http from 'node:http';
 import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {fixture} from './fixtures.mjs';
-import {createSandboxClient,places,modes} from './sandbox-client.mjs';
+import {createSandboxClient,createSnapshotClient,places,modes} from './sandbox-client.mjs';
+import {createDepartureForecaster,ForecastError} from './departure-forecast.mjs';
 import {ServiceError,withSignal,policyFromEnvironment,policyDefaults} from './request-policy.mjs';
 import {createStudentChat} from './student-chat.mjs';
 
@@ -137,9 +138,9 @@ async function readBody(req) {
   catch {throw new LabError(400, 'bad_json', '请求需要是有效 JSON。');}
 }
 
-export function createLabServer(configProvider = loadConfig,{studentProvider=createSandboxClient(),policy={},onMetric=()=>{}}={}) {
+export function createLabServer(configProvider = loadConfig,{studentProvider=createSandboxClient(),snapshotProvider=createSnapshotClient(),forecaster=createDepartureForecaster(),policy={},onMetric=()=>{}}={}) {
   const options={...policyDefaults,...policy};
-  const chat=createStudentChat({studentProvider,configProvider,callDify,readReply,policy:options,onMetric});
+  const chat=createStudentChat({studentProvider,snapshotProvider,forecaster,configProvider,callDify,readReply,policy:options,onMetric});
   const server = http.createServer(async (req, res) => {
     const send = (status, body,headers={}) => {
       if(res.destroyed||res.writableEnded)return;
@@ -157,7 +158,7 @@ export function createLabServer(configProvider = loadConfig,{studentProvider=cre
       const path = new URL(req.url, 'http://' + host).pathname;
       if (req.method === 'GET' && path === '/api/student/options') {
         const config = await configProvider();
-        return send(200,{places,modes,configured:Boolean(config.apiKey),localRoutingEnabled:options.localRoutingEnabled,sourceLabel:'沙盘合成仿真 · 用时与距离为估算'});
+        return send(200,{places,modes,configured:Boolean(config.apiKey),localRoutingEnabled:options.localRoutingEnabled,forecastAvailable:true,forecastBufferMinutes:5,sourceLabel:'沙盘合成仿真 · 用时与距离为估算'});
       }
       if(req.method==='GET'&&path==='/api/student/state'){
         const params=new URL(req.url,'http://'+host).searchParams;
@@ -200,14 +201,14 @@ export function createLabServer(configProvider = loadConfig,{studentProvider=cre
       }
       throw new LabError(404, 'not_found', '路径不存在。');
     } catch (error) {
-      send(error.status || 500, {error: error.code || 'internal_error', message: error instanceof LabError ? error.message : '服务暂不可用，请稍后重试。'});
+      send(error.status || 500, {error: error.code || 'internal_error', message: error instanceof LabError||error instanceof ForecastError ? error.message : '服务暂不可用，请稍后重试。'});
     }
   });
   const close=server.close;
   server.close=function(...args){chat.close();return close.apply(this,args);};
   server.chatStats=chat.stats;
   server.requestTimeout = 65000;
-  return server;
+  server.once('close',()=>forecaster.dispose());return server;
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
