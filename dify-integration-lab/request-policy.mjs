@@ -61,8 +61,8 @@ export class AiScheduler {
   }
   recordFailure(code){
     const now=this.now();this.timeouts=this.timeouts.filter(t=>now-t<30000);
-    if(code==='ai_timeout')this.timeouts.push(now);
-    if(code==='dify_http_429'||this.timeouts.length>=3){
+    if(['ai_timeout','deepseek_timeout'].includes(code))this.timeouts.push(now);
+    if(['dify_http_429','deepseek_http_429'].includes(code)||this.timeouts.length>=3){
       this.until=now+this.cooldownMs;this.timeouts=[];
       for(const entry of this.queue.splice(0)){entry.cleanup();entry.reject(this.unavailable());}
     }

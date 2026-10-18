@@ -64,13 +64,14 @@ export function createStudentChat({studentProvider,snapshotProvider,forecaster,c
       const at=Date.now();let taskId='',config;
       try{
         config=await withSignal(configProvider(),modelSignal);
+        provider=config.provider==='deepseek'?'deepseek':'school-dify';
         const response=await withSignal(callDify(config,'/chat-messages',{inputs:config.inputs||{},query,response_mode:'streaming',user,auto_generate_name:false},{signal:modelSignal}),modelSignal);
         return await withSignal(readReply(response,{signal:modelSignal,onTask:id=>{taskId=id;},
           onFirstChunk:()=>{if(timings.modelFirstByteMs===null)timings.modelFirstByteMs=Date.now()-at;}}),modelSignal);
       }catch(error){
         const failure=modelSignal.aborted?modelSignal.reason:error;
         scheduler.recordFailure(failure.code);
-        if(failure.code==='dify_http_429')failure.retryAfter=Math.ceil(options.cooldownMs/1000);
+        if(['dify_http_429','deepseek_http_429'].includes(failure.code))failure.retryAfter=Math.ceil(options.cooldownMs/1000);
         // Stopping the transport does not promise that a remote model has stopped.
         if(taskId&&config&&(modelSignal.aborted||failure.code==='incomplete_reply')){
           void callDify(config,'/chat-messages/'+encodeURIComponent(taskId)+'/stop',{user},{signal:AbortSignal.timeout(1000)})

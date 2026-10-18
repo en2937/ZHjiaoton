@@ -1,3 +1,5 @@
+import {loadProviderConfig,ProviderError} from '../ai-provider/config.mjs';
+import {callDeepSeek} from '../ai-provider/deepseek.mjs';
 import {DATA_LIMIT_REPLY,questionScope,knowledgePolicy,reportsUncertainty,canonicalQuestion,aliasAcknowledgement} from '../qa-policy/knowledge-scope.mjs';
 import {readFile} from 'node:fs/promises';
 import {behaviorFacts,validBehaviorAggregate} from './behavior-facts.mjs';
@@ -11,11 +13,19 @@ import {readReply} from '../dify-integration-lab/server.mjs';
 const validatorContext=vm.createContext({});
 vm.runInContext(await readFile(new URL('../admin-ai-design/validate-response.js',import.meta.url),'utf8'),validatorContext);
 export class AiError extends Error{constructor(status,message,code='ai_unavailable'){super(message);Object.assign(this,{status,code});}}
-export async function loadAdminAiConfig(){
+async function loadAdminDifyConfig(){
  let saved={};try{saved=JSON.parse(await readFile(new URL('./private/dify-admin.json',import.meta.url),'utf8'));}catch(error){if(error.code!=='ENOENT')throw new AiError(503,'交通助手暂未就绪，请稍后重试。');}
  return {apiBase:process.env.DIFY_ADMIN_API_BASE||saved.apiBase||'https://dify-api.zju.edu.cn/v1',apiKey:process.env.DIFY_ADMIN_API_KEY||saved.apiKey||'',timeoutMs:45000};
 }
+export async function loadAdminAiConfig(){
+ try{return await loadProviderConfig('admin',loadAdminDifyConfig);}
+ catch(error){if(error instanceof ProviderError)throw new AiError(error.status,error.message,error.code);throw error;}
+}
 export async function callAdminDify(config,payload){
+ if(config.provider==='deepseek'){
+  try{return await readReply(await callDeepSeek({...config,audience:'admin'},payload));}
+  catch(error){if(error instanceof ProviderError)throw new AiError(error.status,error.message,error.code);throw error;}
+ }
  if(!config.apiKey)throw new AiError(503,'交通助手暂未连接，请稍后刷新。','not_configured');
  const base=new URL(config.apiBase);
  const permitted=base.protocol==='https:'&&base.hostname==='dify-api.zju.edu.cn'&&base.pathname.replace(/\/$/,'')==='/v1'||config.allowLoopback&&base.protocol==='http:'&&base.hostname==='127.0.0.1';

@@ -1,4 +1,6 @@
 import http from 'node:http';
+import {loadProviderConfig,deepSeekBase} from '../ai-provider/config.mjs';
+import {callDeepSeek,isDeepSeekResponse,readDeepSeekReply,checkDeepSeek} from '../ai-provider/deepseek.mjs';
 import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {fixture} from './fixtures.mjs';
@@ -12,7 +14,7 @@ const webRoot = new URL('./public/', root);
 const LIMIT = 32 * 1024;
 class LabError extends ServiceError {}
 
-export async function loadConfig() {
+async function loadDifyConfig() {
   let saved = {};
   try {saved = JSON.parse(await readFile(new URL('.env.local', root), 'utf8'));}
   catch (e) {if (e.code !== 'ENOENT') throw new Error('本地 Dify 配置格式错误，请重新运行配置程序。');}
@@ -23,7 +25,10 @@ export async function loadConfig() {
   };
 }
 
+export const loadConfig=()=>loadProviderConfig('student',loadDifyConfig);
+
 function apiBase(config) {
+  if(config.provider==='deepseek')return deepSeekBase(config);
   let url;
   try {url = new URL(config.apiBase);}
   catch {throw new LabError(503, 'invalid_config', '请在本地配置程序中填写学校应用的实际 API 地址。');}
@@ -51,6 +56,10 @@ function upstreamError(status) {
 }
 
 async function callDify(config, endpoint, payload, {signal}={}) {
+  if(config.provider==='deepseek'){
+    if(endpoint!=='/chat-messages')throw new LabError(503,'unsupported_endpoint','当前 AI 接口不支持此操作。');
+    return callDeepSeek(config,payload,{signal});
+  }
   const base = requireConfig(config);
   let response;
   try {
@@ -74,6 +83,7 @@ async function callDify(config, endpoint, payload, {signal}={}) {
 }
 
 export async function readReply(response,{signal,onTask=()=>{},onFirstChunk=()=>{}}={}) {
+  if(isDeepSeekResponse(response))return readDeepSeekReply(response,{signal,onFirstChunk});
   const type = response.headers.get('content-type') || '';
   if (type.includes('application/json')) {
     const reader=response.body.getReader(),decoder=new TextDecoder();let raw='',size=0;
@@ -173,12 +183,14 @@ export function createLabServer(configProvider = loadConfig,{studentProvider=cre
       if (req.method === 'GET' && path === '/api/status') {
         const config = await configProvider();
         const base = apiBase(config);
-        return send(200, {configured: Boolean(config.apiKey), apiBase: base, schoolUrl: 'https://dify.zju.edu.cn/apps', mode: 'real-dify', fixtureNotice: '人工构造接口样例，非沙盘计算'});
+        return send(200, {configured: Boolean(config.apiKey), apiBase: base, schoolUrl: config.provider==='deepseek'?null:'https://dify.zju.edu.cn/apps', mode: config.provider==='deepseek'?'real-deepseek':'real-dify', fixtureNotice: '人工构造接口样例，非沙盘计算'});
       }
       if (req.method === 'GET' && /^\/api\/fixtures\/[AB]$/.test(path)) return send(200, fixture(path.at(-1)));
       if (req.method === 'POST' && path === '/api/check') {
         await readBody(req);
-        const response = await callDify(await configProvider(), '/parameters');
+        const config=await configProvider();
+        if(config.provider==='deepseek')return send(200,await checkDeepSeek(config));
+        const response = await callDify(config, '/parameters');
         if (!(response.headers.get('content-type') || '').includes('application/json')) throw new LabError(502, 'unexpected_content', 'API 返回了网页，请核对实际 API 地址。');
         const data = await response.json();
         return send(200, {connected: true, requiredInputs: (data.user_input_form || []).map(item => Object.values(item)[0]).filter(Boolean).map(item => ({variable: item.variable, type: item.type, required: item.required}))});
@@ -201,7 +213,7 @@ export function createLabServer(configProvider = loadConfig,{studentProvider=cre
       }
       throw new LabError(404, 'not_found', '路径不存在。');
     } catch (error) {
-      send(error.status || 500, {error: error.code || 'internal_error', message: error instanceof LabError||error instanceof ForecastError ? error.message : '服务暂不可用，请稍后重试。'});
+      send(error.status || 500, {error: error.code || 'internal_error', message: error instanceof ServiceError||error instanceof ForecastError ? error.message : '服务暂不可用，请稍后重试。'});
     }
   });
   const close=server.close;

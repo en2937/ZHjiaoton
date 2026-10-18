@@ -1,4 +1,5 @@
 import http from 'node:http';
+import {isIP} from 'node:net';
 import https from 'node:https';
 import {X509Certificate} from 'node:crypto';
 import {readFile,writeFile} from 'node:fs/promises';
@@ -18,10 +19,14 @@ async function body(req,limit=4096){
  let size=0;const chunks=[];for await(const chunk of req){size+=chunk.length;if(size>limit)throw new AuthError(413,'请求内容过长。');chunks.push(chunk);}
  try{return JSON.parse(Buffer.concat(chunks).toString('utf8'));}catch{throw new AuthError(400,'请求格式不正确，请重试。');}
 }
-export function createAdminServer({auth,bridgeKey,sandboxPort=4173,host='127.0.0.1',port=4174,tlsOptions=null,viewerHref='http://127.0.0.1:4173/viewer/',studentHref='http://127.0.0.1:4183/student/',allowAddress,aiConfigProvider,aiModel,aiMaxPerMinute}={}){
+export function createAdminServer({auth,bridgeKey,sandboxPort=4173,host='127.0.0.1',port=4174,tlsOptions=null,viewerHref='http://127.0.0.1:4173/viewer/',studentHref='http://127.0.0.1:4183/student/',allowAddress,aiConfigProvider,aiModel,aiMaxPerMinute,publicProxy=null}={}){
  if(!auth||!bridgeKey)throw new Error('管理员服务缺少配置');
- const transport=tlsOptions?'secure':'local';
- const addressAllowed=allowAddress||(transport==='secure'?allowedCampusAddress:loopback);
+ let proxyOrigin=null;
+ if(publicProxy){try{proxyOrigin=new URL(publicProxy.origin);}catch{}
+  if(!proxyOrigin||proxyOrigin.protocol!=='https:'||proxyOrigin.pathname!=='/'||proxyOrigin.username||proxyOrigin.password||proxyOrigin.search||proxyOrigin.hash||!/^[a-f0-9]{64}$/.test(publicProxy.key||''))throw new Error('公网代理配置无效');
+ }
+ const transport=tlsOptions||proxyOrigin?'secure':'local';
+ const addressAllowed=proxyOrigin?loopback:allowAddress||(transport==='secure'?allowedCampusAddress:loopback);
  async function sandboxJson(command){
   let response;
   try{response=await fetch('http://127.0.0.1:'+sandboxPort+(command?'/api/control':'/api/simulation'),{method:command?'POST':'GET',redirect:'error',headers:command?{'Content-Type':'application/json',Origin:'http://127.0.0.1:'+sandboxPort,'X-Admin-Control-Key':bridgeKey}:{},body:command?JSON.stringify(command):undefined,signal:AbortSignal.timeout(4000)});}catch{throw new AiError(503,'沙盘暂不可用，请稍后重试。');}
@@ -35,7 +40,10 @@ export function createAdminServer({auth,bridgeKey,sandboxPort=4173,host='127.0.0
   res.setHeader('Content-Security-Policy',"default-src 'self'; connect-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
   try{
    if(!addressAllowed(req.socket.remoteAddress))throw new AuthError(403,'仅接受校园网内访问。');
-   const authority=host+':'+(port||server.address().port),origin=(transport==='secure'?'https://':'http://')+authority;
+   if(proxyOrigin&&!equalSecret(req.headers['x-internal-proxy-key'],publicProxy.key))throw new AuthError(403,'访问入口无效。');
+   const clientIp=proxyOrigin?req.headers['x-internal-client-ip']:req.socket.remoteAddress;
+   if(proxyOrigin&&!isIP(clientIp||''))throw new AuthError(403,'访问入口无效。');
+   const authority=proxyOrigin?.host||host+':'+(port||server.address().port),origin=proxyOrigin?.origin||(transport==='secure'?'https://':'http://')+authority;
    if(req.headers.host!==authority||req.headers.origin&&req.headers.origin!==origin)throw new AuthError(403,'请从正确的管理入口操作。');
    if(req.method==='POST'&&req.headers.origin!==origin)throw new AuthError(403,'请从管理页面操作。');
    if(!req.url.startsWith('/')||req.url.startsWith('//'))throw new AuthError(400,'请求地址无效。');
@@ -48,7 +56,7 @@ export function createAdminServer({auth,bridgeKey,sandboxPort=4173,host='127.0.0
    if(req.method==='POST'&&['/api/admin/setup','/api/admin/login'].includes(pathname)){
     if(pathname.endsWith('/setup')&&!canSetup)throw new AuthError(403,'请在服务器电脑设置管理员账号。');
     const input=await body(req);if(pathname.endsWith('/setup'))await auth.setup(input.username,input.password);
-    const result=await auth.login(input.username,input.password,req.socket.remoteAddress,transport);
+    const result=await auth.login(input.username,input.password,clientIp,transport);
     res.setHeader('Set-Cookie',auth.cookie(result.value,transport));return send(200,{ok:true});
    }
    if(req.method==='GET'&&pathname==='/viewer/'){res.writeHead(302,{Location:viewerHref});res.end();return;}

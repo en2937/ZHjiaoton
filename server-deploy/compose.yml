@@ -1,0 +1,68 @@
+name: zju-traffic
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: server-deploy/Dockerfile
+    restart: unless-stopped
+    init: true
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      TRAFFIC_DATA_DIR: /data
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?Set PUBLIC_ORIGIN in the private env file}
+      TRAFFIC_PROXY_KEY: ${TRAFFIC_PROXY_KEY:?Generate the private proxy key}
+      AI_PROVIDER: deepseek
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:?Fill the private DeepSeek API key}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-flash}
+      TZ: Asia/Shanghai
+    volumes:
+      - app_data:/data
+    expose:
+      - "3000"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 1536m
+    stop_grace_period: 60s
+    healthcheck:
+      test: ["CMD", "node", "server-deploy/health.mjs"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      PUBLIC_HOST: ${PUBLIC_HOST:?Set the public hostname}
+      TRAFFIC_PROXY_KEY: ${TRAFFIC_PROXY_KEY:?Generate the private proxy key}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+volumes:
+  app_data:
+  caddy_data:
+  caddy_config:

@@ -195,7 +195,7 @@ function publicError(code){
   if(forecastErrors[code])return forecastErrors[code];
   const requestErrors={rate_limited:'提问过于频繁，请稍后再试。',gateway_busy:'访问人数较多，请稍后再试。',invalid_json:'问题格式有误，请刷新页面后重试。',body_too_large:'问题内容过长，请缩短后重试。'};
   if(requestErrors[code])return requestErrors[code];
-  const messages={bad_question:'请输入 1–1000 字的问题。',bad_session:'请刷新页面后重试。',bad_trip:'请先选择行程和出行方式。',unknown_trip:'这个行程暂时没有路线数据。',session_busy:'上一条问题还在处理中，请稍等。',session_limit:'服务繁忙，请稍后再试。',session_rate_limit:'提问过于频繁，请稍后再试。',sandbox_unavailable:'交通数据暂不可用，请稍后重试。',dify_http_429:'AI 服务繁忙，请稍后再试。',dify_timeout:'AI 回答超时，请手动重试。',invalid_student_reply:'AI 暂未完成回答，请手动重试。',ai_busy:'AI 服务繁忙，暂未完成回答。',ai_queue_timeout:'AI 等待超时，暂未完成回答。',ai_timeout:'AI 回答超时，暂未完成回答。',ai_cooldown:'AI 暂时繁忙，请稍后再试。',state_changed:'交通方案已更新，请重新查询。',request_timeout:'请求超时，AI 暂未完成回答。',not_configured:'AI 暂未配置，可查看本地路线。'};
+  const messages={bad_question:'请输入 1–1000 字的问题。',bad_session:'请刷新页面后重试。',bad_trip:'请先选择行程和出行方式。',unknown_trip:'这个行程暂时没有路线数据。',session_busy:'上一条问题还在处理中，请稍等。',session_limit:'服务繁忙，请稍后再试。',session_rate_limit:'提问过于频繁，请稍后再试。',sandbox_unavailable:'交通数据暂不可用，请稍后重试。',dify_http_429:'AI 服务繁忙，请稍后再试。',dify_timeout:'AI 回答超时，请手动重试。',deepseek_http_429:'AI 服务繁忙，请稍后再试。',deepseek_timeout:'AI 回答超时，请手动重试。',invalid_student_reply:'AI 暂未完成回答，请手动重试。',ai_busy:'AI 服务繁忙，暂未完成回答。',ai_queue_timeout:'AI 等待超时，暂未完成回答。',ai_timeout:'AI 回答超时，暂未完成回答。',ai_cooldown:'AI 暂时繁忙，请稍后再试。',state_changed:'交通方案已更新，请重新查询。',request_timeout:'请求超时，AI 暂未完成回答。',not_configured:'AI 暂未配置，可查看本地路线。'};
   return messages[code]||'出行服务暂不可用，请稍后重试。';
 }
 function setBusy(value){busy=value;document.querySelectorAll('button,select,textarea').forEach(e=>e.disabled=(value&&e!==$('reset-chat')&&e!==$('cancel-question'))||e.dataset.available==='false');$('cancel-question').hidden=!value;$('question-form').setAttribute('aria-busy',String(value));}
@@ -210,7 +210,7 @@ function renderReply(data,chosenTrip){
   chosenTrip=data.trip??chosenTrip;
   const article=element('article','assistant-message'),byline=element('div','reply-byline');
   const placeName=id=>[...$('origin').options].find(p=>p.value===id)?.textContent||id;
-  byline.append(icons('spark'),element('span','',data.provider==='sandbox-forecast'?'出发建议':data.provider==='school-dify'?'AI 出行建议':data.provider==='local-routing'?'本地路线计算':'行程提示'),element('span','trip-context',placeName(chosenTrip.origin)+' → '+placeName(chosenTrip.destination)+' · '+({electric:'电动车',bicycle:'自行车'}[chosenTrip.mode])));
+  byline.append(icons('spark'),element('span','',data.provider==='sandbox-forecast'?'出发建议':['school-dify','deepseek'].includes(data.provider)?'AI 出行建议':data.provider==='local-routing'?'本地路线计算':'行程提示'),element('span','trip-context',placeName(chosenTrip.origin)+' → '+placeName(chosenTrip.destination)+' · '+({electric:'电动车',bicycle:'自行车'}[chosenTrip.mode])));
   article.append(byline,element('p','recommendation',data.message));
   if(data.kind==='departure_forecast'){
     if(data.status==='ok'&&data.forecast?.recommendation){
